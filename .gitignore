@@ -2,3 +2,8 @@ CLAUDE.md
 PROJECT.md
 ZETTEL.md
 THREAT_MODEL.md
+
+# Build artefacts and dependencies
+node_modules/
+dist/
+web-ext-artifacts/

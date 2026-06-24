@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    // File layout: TS sources in src/, bundled output goes to dist/ via Rollup.
+    "rootDir": "./src",
+    "outDir": "./dist",
+
+    // Environment: bundled WebExtension code (Rollup), modern target.
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "target": "ESNext",
+    "lib": ["ESNext", "DOM", "DOM.Iterable", "WebWorker"],
+    "types": [],
+
+    // Outputs
+    "sourceMap": true,
+    "noEmit": false,
+
+    // Strictness
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "noUncheckedSideEffectImports": true,
+    "moduleDetection": "force",
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*"]
+}

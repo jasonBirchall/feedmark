@@ -1,0 +1,35 @@
+{
+  "name": "feedmark",
+  "version": "0.0.0",
+  "description": "An RSS feed extension for Firefox and Chrome",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "ssh://git@codeberg.org/jasonbirchall/feedmark.git"
+  },
+  "license": "ISC",
+  "author": "jasonbirchall",
+  "type": "commonjs",
+  "scripts": {
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit",
+    "build": "rollup -c rollup.config.mjs",
+    "run": "web-ext run --source-dir=dist",
+    "test": "echo \"no tests yet\" && exit 0"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@rollup/plugin-commonjs": "29.0.3",
+    "@rollup/plugin-node-resolve": "16.0.3",
+    "@rollup/plugin-typescript": "12.3.0",
+    "eslint": "10.5.0",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.8.4",
+    "rollup": "4.62.2",
+    "tslib": "2.8.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.62.0",
+    "web-ext": "10.4.0"
+  }
+}
