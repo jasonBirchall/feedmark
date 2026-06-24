@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Feedmark",
+  "version": "0.0.0",
+  "description": "An RSS reader built on the bookmark tree.",
+  "background": {
+    "service_worker": "background.js",
+    "scripts": ["background.js"]
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "feedmark@jasonbirchall.codeberg.org"
+    }
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}
