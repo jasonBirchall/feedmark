@@ -1,0 +1,46 @@
+# Feedmark CI guardrail.
+#
+# Runs the exact same checks as the local `make` loop on every push, so a green
+# laptop run and a green CI run mean the same thing ("tight local loop first").
+# This job uses no secrets.
+name: CI
+
+on:
+  push:
+
+# Least privilege: the guardrail only ever reads the repo. (Forgejo's per-job
+# token permissions are only partially supported today; kept as forward-
+# compatible hardening, matching the threat model's Group C note.)
+permissions:
+  contents: read
+
+jobs:
+  guardrail:
+    runs-on: docker
+    # Pin the toolchain image so the environment is reproducible. The full
+    # (non-slim) node image is buildpack-deps based, so `make` is present and
+    # no setup-node action is needed — one fewer third-party action to trust.
+    container:
+      image: node:22-bookworm
+    steps:
+      # Pinned to a full commit SHA on code.forgejo.org (Codeberg's actions
+      # registry), per supply-chain hardening — not GitHub's SHA for the same
+      # tag. persist-credentials:false keeps the checkout token out of .git.
+      - uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          persist-credentials: false
+
+      - name: Install (exact-pinned, no install scripts)
+        run: make install
+
+      - name: Typecheck
+        run: make typecheck
+
+      - name: Lint (eslint + prettier)
+        run: make lint
+
+      - name: Lint extension (web-ext)
+        run: make lint-ext
+
+      - name: Advisory scan
+        run: make audit
