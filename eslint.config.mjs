@@ -9,8 +9,19 @@ export default tseslint.config(
   {
     languageOptions: {
       globals: {
-        // Extension background runs as a service worker / event page.
+        // Service-worker / WHATWG globals used across src and tests.
         console: "readonly",
+        fetch: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
+        AbortController: "readonly",
+        TextDecoder: "readonly",
+        TextEncoder: "readonly",
+        URL: "readonly",
+        Response: "readonly",
+        Headers: "readonly",
+        ReadableStream: "readonly",
+        DOMException: "readonly",
       },
     },
   },
