@@ -12,12 +12,20 @@ function record(over: Partial<FeedRecord> = {}): FeedRecord {
     unread: 0,
     etag: null,
     lastModified: null,
+    items: [],
     ...over,
   };
 }
 
 function rssWith(guids: string[]): string {
   const items = guids.map((g) => `<item><guid>${g}</guid></item>`).join("");
+  return `<?xml version="1.0"?><rss version="2.0"><channel>${items}</channel></rss>`;
+}
+
+function rssWithTitles(pairs: { guid: string; title: string }[]): string {
+  const items = pairs
+    .map((p) => `<item><title>${p.title}</title><guid>${p.guid}</guid></item>`)
+    .join("");
   return `<?xml version="1.0"?><rss version="2.0"><channel>${items}</channel></rss>`;
 }
 
@@ -49,6 +57,31 @@ test("new items accumulate onto the prior count", async () => {
   assert.ok(out);
   assert.equal(out.unread, 3);
   assert.deepEqual(out.seenGuids.slice(0, 2), ["b", "c"]);
+});
+
+test("a successful poll persists the parsed items for rendering", async () => {
+  const out = await pollFeed(record(), {
+    fetchImpl: okFetch(
+      rssWithTitles([
+        { guid: "a", title: "Alpha" },
+        { guid: "b", title: "Beta" },
+      ]),
+    ),
+  });
+  assert.ok(out);
+  assert.deepEqual(out.items, [
+    { guid: "a", title: "Alpha" },
+    { guid: "b", title: "Beta" },
+  ]);
+});
+
+test("each poll replaces the stored items with the latest parse", async () => {
+  const out = await pollFeed(
+    record({ items: [{ guid: "old", title: "Old" }], seenGuids: ["old"], unread: 1 }),
+    { fetchImpl: okFetch(rssWithTitles([{ guid: "new", title: "New" }])) },
+  );
+  assert.ok(out);
+  assert.deepEqual(out.items, [{ guid: "new", title: "New" }]);
 });
 
 test("a failed fetch leaves state untouched (null, last-good preserved)", async () => {

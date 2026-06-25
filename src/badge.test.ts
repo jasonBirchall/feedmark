@@ -12,6 +12,7 @@ function rec(unread: number): FeedRecord {
     unread,
     etag: null,
     lastModified: null,
+    items: [],
   };
 }
 

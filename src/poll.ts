@@ -29,6 +29,7 @@ export async function pollFeed(
     seenGuids: [...fresh, ...record.seenGuids].slice(0, MAX_SEEN_GUIDS),
     etag: result.etag,
     lastModified: result.lastModified,
+    items, // latest parse, for the popup to render
   };
 }
 

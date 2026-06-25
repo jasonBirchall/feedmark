@@ -1,5 +1,6 @@
 import browser from "webextension-polyfill";
 import { HARDCODED_FEEDS } from "./config.ts";
+import type { ParsedItem } from "./parseFeed.ts";
 
 export type FeedRecord = {
   id: string;
@@ -9,6 +10,7 @@ export type FeedRecord = {
   unread: number;
   etag: string | null;
   lastModified: string | null;
+  items: ParsedItem[];
 };
 
 const KEY = "feeds";
@@ -39,6 +41,7 @@ export async function ensureSeedFeeds(): Promise<void> {
         unread: 0,
         etag: null,
         lastModified: null,
+        items: [],
       };
       changed = true;
     }
