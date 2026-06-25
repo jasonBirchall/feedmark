@@ -7,6 +7,9 @@
     "service_worker": "background.js",
     "scripts": ["background.js"]
   },
+  "action": {},
+  "permissions": ["alarms", "storage"],
+  "host_permissions": ["https://blog.mozilla.org/*"],
   "browser_specific_settings": {
     "gecko": {
       "id": "feedmark@jasonbirchall.codeberg.org"
