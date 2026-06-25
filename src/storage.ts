@@ -37,3 +37,13 @@ export async function hasFeed(id: string): Promise<boolean> {
   const map = await readMap();
   return id in map;
 }
+
+// Zero one feed's unread count (the user opened it). No-op if it's gone. The
+// background is the single writer, so this is only ever called there.
+export async function clearUnread(id: string): Promise<void> {
+  const map = await readMap();
+  const record = map[id];
+  if (!record) return;
+  record.unread = 0;
+  await browser.storage.local.set({ [KEY]: map });
+}

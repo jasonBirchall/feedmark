@@ -1,6 +1,6 @@
 import browser from "webextension-polyfill";
 import { renderSources } from "./render.ts";
-import type { GetItemsRequest, GetItemsResponse } from "./messages.ts";
+import type { GetItemsRequest, GetItemsResponse, ClearUnreadRequest } from "./messages.ts";
 
 // The popup shell: ask the background for the per-source view and render it.
 // No network here — opening the popup must not fire a single request (the items
@@ -20,7 +20,13 @@ async function main(): Promise<void> {
     return;
   }
 
-  root.appendChild(renderSources(sources, document));
+  // Opening a source clears its count; the anchor's href opens the site natively.
+  root.appendChild(
+    renderSources(sources, document, (id) => {
+      const clear: ClearUnreadRequest = { type: "clearUnread", id };
+      void browser.runtime.sendMessage(clear);
+    }),
+  );
 }
 
 void main();

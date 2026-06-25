@@ -10,7 +10,9 @@ import type { FeedView } from "./messages.ts";
 class FakeEl {
   readonly tag: string;
   readonly children: FakeEl[] = [];
+  href = "";
   #text = "";
+  #listeners: Record<string, Array<() => void>> = {};
   constructor(tag: string) {
     this.tag = tag;
   }
@@ -23,6 +25,12 @@ class FakeEl {
   appendChild(child: FakeEl): FakeEl {
     this.children.push(child);
     return child;
+  }
+  addEventListener(type: string, handler: () => void): void {
+    (this.#listeners[type] ??= []).push(handler);
+  }
+  click(): void {
+    for (const handler of this.#listeners["click"] ?? []) handler();
   }
   set innerHTML(_value: string) {
     throw new Error("innerHTML must never be set on feed-derived content");
@@ -82,22 +90,25 @@ test("an onerror img payload renders as inert text", () => {
   assert.equal(root.children[0]?.textContent, payload);
 });
 
-function renderSrc(sources: FeedView[]): FakeEl {
+function view(over: Partial<FeedView> = {}): FeedView {
+  return { id: "s", url: "https://s.test/", title: "Source", unread: 0, items: [], ...over };
+}
+
+function renderSrc(sources: FeedView[], onOpen: (id: string) => void = () => {}): FakeEl {
   const doc = new FakeDoc();
-  return renderSources(sources, doc as unknown as Document) as unknown as FakeEl;
+  return renderSources(sources, doc as unknown as Document, onOpen) as unknown as FakeEl;
 }
 
 test("renders one labelled section per source with its unread count", () => {
-  const root = renderSrc([
-    { title: "Alpha", unread: 2, items: [] },
-    { title: "Beta", unread: 0, items: [] },
-  ]);
+  const root = renderSrc([view({ title: "Alpha", unread: 2 }), view({ title: "Beta", unread: 0 })]);
   const headings = root.children.map((section) => section.children[0]?.textContent);
   assert.deepEqual(headings, ["Alpha (2)", "Beta (0)"]);
 });
 
 test("a source's items render as text beneath its heading", () => {
-  const root = renderSrc([{ title: "Alpha", unread: 1, items: [{ guid: "a", title: "Story" }] }]);
+  const root = renderSrc([
+    view({ title: "Alpha", unread: 1, items: [{ guid: "a", title: "Story" }] }),
+  ]);
   const section = root.children[0];
   const list = section?.children[1]; // [0] heading, [1] the item list
   assert.deepEqual(
@@ -110,7 +121,20 @@ test("a source's items render as text beneath its heading", () => {
 // could have planted it, or a synced bookmark) must land as inert text too.
 test("a <script> payload in a source title renders as inert text", () => {
   const payload = `<script>alert(1)</script>`;
-  const root = renderSrc([{ title: payload, unread: 1, items: [] }]);
+  const root = renderSrc([view({ title: payload, unread: 1 })]);
   const heading = root.children[0]?.children[0];
   assert.equal(heading?.textContent, `${payload} (1)`);
+});
+
+test("a source heading links to its site and signals a clear on click", () => {
+  const opened: string[] = [];
+  const root = renderSrc(
+    [view({ id: "moz", url: "https://blog.mozilla.org/", title: "Mozilla", unread: 3 })],
+    (id) => opened.push(id),
+  );
+  const link = root.children[0]?.children[0];
+  assert.equal(link?.href, "https://blog.mozilla.org/"); // opens the site
+  assert.equal(link?.textContent, "Mozilla (3)");
+  link?.click();
+  assert.deepEqual(opened, ["moz"]); // clears the right source
 });

@@ -15,15 +15,24 @@ export function renderItems(items: ParsedItem[], doc: Document): HTMLElement {
   return list;
 }
 
-// One labelled section per source: a heading carrying the bookmark title and its
-// unread count, then that source's items. The render invariant extends here — the
-// bookmark title also reaches the DOM via textContent only, never innerHTML.
-export function renderSources(sources: FeedView[], doc: Document): HTMLElement {
+// One labelled section per source: a clickable heading linking to the source's
+// site and carrying its title + unread count, then that source's items. Clicking
+// opens the site (the href) and calls onOpen so the caller can clear the count.
+// The render invariant extends here — the bookmark title reaches the DOM via
+// textContent only, never innerHTML; the href is the registration-validated
+// https url.
+export function renderSources(
+  sources: FeedView[],
+  doc: Document,
+  onOpen: (id: string) => void,
+): HTMLElement {
   const root = doc.createElement("div");
   for (const source of sources) {
     const section = doc.createElement("section");
-    const heading = doc.createElement("h2");
+    const heading = doc.createElement("a");
+    heading.href = source.url;
     heading.textContent = `${source.title} (${source.unread})`;
+    heading.addEventListener("click", () => onOpen(source.id));
     section.appendChild(heading);
     section.appendChild(renderItems(source.items, doc));
     root.appendChild(section);

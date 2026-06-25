@@ -2,7 +2,7 @@
 // All poll state lives in storage.local; nothing is held in memory across wakes.
 import browser from "webextension-polyfill";
 import { ALARM_NAME, ALARM_PERIOD_MINUTES, SOURCE_FOLDER_TITLE } from "./config.ts";
-import { loadFeeds, saveFeed, hasFeed } from "./storage.ts";
+import { loadFeeds, saveFeed, hasFeed, clearUnread } from "./storage.ts";
 import { feedsFromFolder } from "./source.ts";
 import { pollAll } from "./poll.ts";
 import { totalUnread, badgeText } from "./badge.ts";
@@ -49,12 +49,23 @@ async function init(): Promise<void> {
 // already stored, and never triggers a fetch — so opening the popup makes no
 // network request. Returning a Promise replies with its resolved value.
 browser.runtime.onMessage.addListener((message: unknown): Promise<GetItemsResponse> | undefined => {
-  if ((message as { type?: unknown })?.type === "getItems") {
+  const msg = message as { type?: unknown; id?: unknown };
+  if (msg?.type === "getItems") {
     return loadFeeds().then((feeds) => ({
-      sources: feeds.map((f) => ({ title: f.title, unread: f.unread, items: f.items })),
+      sources: feeds.map((f) => ({
+        id: f.id,
+        url: f.url,
+        title: f.title,
+        unread: f.unread,
+        items: f.items,
+      })),
     }));
   }
-  return undefined; // not ours
+  // Opening a source clears its count; recompute the badge from the new state.
+  if (msg?.type === "clearUnread" && typeof msg.id === "string") {
+    void clearUnread(msg.id).then(refreshBadge);
+  }
+  return undefined; // not ours, or fire-and-forget with no reply
 });
 
 browser.runtime.onInstalled.addListener(() => {
