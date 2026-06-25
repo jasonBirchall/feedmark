@@ -5,4 +5,8 @@ import type { ParsedItem } from "./parseFeed.ts";
 // which is the single reader/writer of storage.local); it never fetches.
 export type GetItemsRequest = { type: "getItems" };
 
-export type GetItemsResponse = { items: ParsedItem[] };
+// One source as the popup sees it: the bookmark's title, its unread count, and
+// its latest items. Replaces the flat item list of iter 3/4 with per-source groups.
+export type FeedView = { title: string; unread: number; items: ParsedItem[] };
+
+export type GetItemsResponse = { sources: FeedView[] };

@@ -1,8 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { renderItems } from "./render.ts";
+import { renderItems, renderSources } from "./render.ts";
 import { parseFeed } from "./parseFeed.ts";
 import type { ParsedItem } from "./parseFeed.ts";
+import type { FeedView } from "./messages.ts";
 
 // A minimal fake DOM. Its whole job is to prove the render path uses textContent
 // and NEVER innerHTML: the innerHTML setter throws, so any use fails the test.
@@ -79,4 +80,37 @@ test("an onerror img payload renders as inert text", () => {
   const items = feedWithTitle(payload);
   const root = render(items);
   assert.equal(root.children[0]?.textContent, payload);
+});
+
+function renderSrc(sources: FeedView[]): FakeEl {
+  const doc = new FakeDoc();
+  return renderSources(sources, doc as unknown as Document) as unknown as FakeEl;
+}
+
+test("renders one labelled section per source with its unread count", () => {
+  const root = renderSrc([
+    { title: "Alpha", unread: 2, items: [] },
+    { title: "Beta", unread: 0, items: [] },
+  ]);
+  const headings = root.children.map((section) => section.children[0]?.textContent);
+  assert.deepEqual(headings, ["Alpha (2)", "Beta (0)"]);
+});
+
+test("a source's items render as text beneath its heading", () => {
+  const root = renderSrc([{ title: "Alpha", unread: 1, items: [{ guid: "a", title: "Story" }] }]);
+  const section = root.children[0];
+  const list = section?.children[1]; // [0] heading, [1] the item list
+  assert.deepEqual(
+    list?.children.map((li) => li.textContent),
+    ["Story"],
+  );
+});
+
+// The render-invariant gate extended to bookmark titles: a hostile title (a feed
+// could have planted it, or a synced bookmark) must land as inert text too.
+test("a <script> payload in a source title renders as inert text", () => {
+  const payload = `<script>alert(1)</script>`;
+  const root = renderSrc([{ title: payload, unread: 1, items: [] }]);
+  const heading = root.children[0]?.children[0];
+  assert.equal(heading?.textContent, `${payload} (1)`);
 });

@@ -50,7 +50,9 @@ async function init(): Promise<void> {
 // network request. Returning a Promise replies with its resolved value.
 browser.runtime.onMessage.addListener((message: unknown): Promise<GetItemsResponse> | undefined => {
   if ((message as { type?: unknown })?.type === "getItems") {
-    return loadFeeds().then((feeds) => ({ items: feeds.flatMap((f) => f.items) }));
+    return loadFeeds().then((feeds) => ({
+      sources: feeds.map((f) => ({ title: f.title, unread: f.unread, items: f.items })),
+    }));
   }
   return undefined; // not ours
 });
