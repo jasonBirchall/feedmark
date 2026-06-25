@@ -6,6 +6,7 @@ import type { FeedRecord } from "./storage.ts";
 function record(over: Partial<FeedRecord> = {}): FeedRecord {
   return {
     id: "f",
+    title: "f",
     url: "https://x.test/feed",
     origin: "https://x.test",
     seenGuids: [],

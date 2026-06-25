@@ -12,6 +12,6 @@ export const MAX_ITEMS = 200; // items parsed per feed
 export const MAX_SEEN_GUIDS = 200; // bounded seen-GUID history per feed
 export const MAX_CONCURRENCY = 3; // concurrent feed fetches
 
-// The single source for iteration 4: the extension reads the first bookmark
-// titled this and treats its URL as the feed. Folder mirroring arrives in iter 5.
-export const SOURCE_BOOKMARK_TITLE = "Feedmark";
+// The watched folder (iter 5): the extension mirrors the bookmarks folder titled
+// this — each child bookmark becomes a feed source.
+export const SOURCE_FOLDER_TITLE = "Feedmark";

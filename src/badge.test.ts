@@ -6,6 +6,7 @@ import type { FeedRecord } from "./storage.ts";
 function rec(unread: number): FeedRecord {
   return {
     id: String(unread),
+    title: "x",
     url: "https://x.test/feed",
     origin: "https://x.test",
     seenGuids: [],

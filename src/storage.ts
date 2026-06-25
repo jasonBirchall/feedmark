@@ -3,6 +3,7 @@ import type { ParsedItem } from "./parseFeed.ts";
 
 export type FeedRecord = {
   id: string;
+  title: string;
   url: string;
   origin: string;
   seenGuids: string[];

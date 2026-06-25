@@ -1,23 +1,27 @@
 // Feedmark background — alarm-driven poll of the feed read from a bookmark.
 // All poll state lives in storage.local; nothing is held in memory across wakes.
 import browser from "webextension-polyfill";
-import { ALARM_NAME, ALARM_PERIOD_MINUTES, SOURCE_BOOKMARK_TITLE } from "./config.ts";
+import { ALARM_NAME, ALARM_PERIOD_MINUTES, SOURCE_FOLDER_TITLE } from "./config.ts";
 import { loadFeeds, saveFeed, hasFeed } from "./storage.ts";
-import { feedFromBookmark } from "./source.ts";
+import { feedsFromFolder } from "./source.ts";
 import { pollAll } from "./poll.ts";
 import { totalUnread, badgeText } from "./badge.ts";
 import type { GetItemsResponse } from "./messages.ts";
 
-// Read the one bookmark titled SOURCE_BOOKMARK_TITLE and register it as the feed
-// source. Read once at init (iter 4); live folder sync arrives iter 5. Only the
-// FIRST sight writes a record — a re-read never clobbers accumulated state.
-async function registerBookmarkSource(): Promise<void> {
-  const matches = await browser.bookmarks.search({ title: SOURCE_BOOKMARK_TITLE });
-  const bm = matches[0];
-  if (!bm) return; // no source bookmark yet → popup shows "No items yet."
-  const record = feedFromBookmark(bm);
-  if (record && !(await hasFeed(record.id))) {
-    await saveFeed(record);
+// Scan the folder titled SOURCE_FOLDER_TITLE and register each child bookmark as
+// a feed source. Scanned once at init; live sync of folder edits arrives later in
+// iter 5. Only the FIRST sight of a bookmark writes a record — a re-scan never
+// clobbers accumulated state (baseline, seen-GUIDs, unread).
+async function registerFolderSources(): Promise<void> {
+  const matches = await browser.bookmarks.search({ title: SOURCE_FOLDER_TITLE });
+  const folder = matches.find((node) => !node.url); // a folder has no url
+  if (!folder) return; // no Feedmark folder yet → popup shows "No items yet."
+  const [tree] = await browser.bookmarks.getSubTree(folder.id);
+  if (!tree) return;
+  for (const record of feedsFromFolder(tree)) {
+    if (!(await hasFeed(record.id))) {
+      await saveFeed(record);
+    }
   }
 }
 
@@ -34,7 +38,7 @@ async function pollCycle(): Promise<void> {
 }
 
 async function init(): Promise<void> {
-  await registerBookmarkSource();
+  await registerFolderSources();
   await browser.alarms.create(ALARM_NAME, {
     periodInMinutes: ALARM_PERIOD_MINUTES,
   });
