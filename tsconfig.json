@@ -9,11 +9,18 @@
     "moduleResolution": "bundler",
     "target": "ESNext",
     "lib": ["ESNext", "DOM", "DOM.Iterable", "WebWorker"],
-    "types": [],
+    "types": ["node"],
 
     // Outputs
     "sourceMap": true,
-    "noEmit": false,
+    // Tests import sibling modules with explicit .ts extensions (required when
+    // Node runs them as ESM under --experimental-strip-types); tsc only type-
+    // checks (--noEmit), and Rollup emits via its own plugin.
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    // Satisfies allowImportingTsExtensions when Rollup's plugin emits, so the
+    // build is warning-clean; inconsequential for the inlined iife bundle.
+    "rewriteRelativeImportExtensions": true,
 
     // Strictness
     "strict": true,

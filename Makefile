@@ -2,7 +2,7 @@
 # they ever run in CI. Each target does exactly what it says.
 
 .DEFAULT_GOAL := help
-.PHONY: help install lint lint-ext audit format typecheck build run clean
+.PHONY: help install lint lint-ext audit format typecheck test build run clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -20,6 +20,9 @@ format: ## Auto-fix formatting
 
 typecheck: ## Type-check without emitting
 	npx tsc --noEmit
+
+test: ## Run the unit test suite (node:test, TS via type-stripping)
+	node --test --experimental-strip-types $$(find src -name '*.test.ts')
 
 lint-ext: build ## Lint the built extension with web-ext (mirrors CI; warnings are non-fatal)
 	npx web-ext lint --source-dir=dist
