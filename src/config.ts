@@ -1,5 +1,6 @@
-// Central constants. Security parameters (bounds) and the throwaway iter-2 feed
-// live here so every module references one source. No logic.
+// Central constants. Security parameters (bounds), the alarm schedule, and the
+// marker title of the source bookmark live here so every module references one
+// source. No logic.
 
 export const ALARM_NAME = "feedmark-poll";
 export const ALARM_PERIOD_MINUTES = 15;
@@ -11,16 +12,6 @@ export const MAX_ITEMS = 200; // items parsed per feed
 export const MAX_SEEN_GUIDS = 200; // bounded seen-GUID history per feed
 export const MAX_CONCURRENCY = 3; // concurrent feed fetches
 
-// Throwaway hardcoded feed for the walking skeleton; replaced by a bookmark in
-// iteration 4. Origin is pinned here at "registration".
-export const HARDCODED_FEEDS: ReadonlyArray<{
-  id: string;
-  url: string;
-  origin: string;
-}> = [
-  {
-    id: "mozilla-blog",
-    url: "https://blog.mozilla.org/feed/",
-    origin: "https://blog.mozilla.org",
-  },
-];
+// The single source for iteration 4: the extension reads the first bookmark
+// titled this and treats its URL as the feed. Folder mirroring arrives in iter 5.
+export const SOURCE_BOOKMARK_TITLE = "Feedmark";

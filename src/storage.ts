@@ -1,5 +1,4 @@
 import browser from "webextension-polyfill";
-import { HARDCODED_FEEDS } from "./config.ts";
 import type { ParsedItem } from "./parseFeed.ts";
 
 export type FeedRecord = {
@@ -30,21 +29,7 @@ export async function saveFeed(record: FeedRecord): Promise<void> {
   await browser.storage.local.set({ [KEY]: map });
 }
 
-export async function ensureSeedFeeds(): Promise<void> {
+export async function hasFeed(id: string): Promise<boolean> {
   const map = await readMap();
-  let changed = false;
-  for (const feed of HARDCODED_FEEDS) {
-    if (!map[feed.id]) {
-      map[feed.id] = {
-        ...feed,
-        seenGuids: [],
-        unread: 0,
-        etag: null,
-        lastModified: null,
-        items: [],
-      };
-      changed = true;
-    }
-  }
-  if (changed) await browser.storage.local.set({ [KEY]: map });
+  return id in map;
 }
