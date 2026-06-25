@@ -10,8 +10,8 @@
   "action": {
     "default_popup": "popup.html"
   },
-  "permissions": ["alarms", "storage"],
-  "host_permissions": ["https://blog.mozilla.org/*"],
+  "permissions": ["alarms", "storage", "bookmarks"],
+  "host_permissions": ["https://*/*"],
   "browser_specific_settings": {
     "gecko": {
       "id": "feedmark@jasonbirchall.codeberg.org"
