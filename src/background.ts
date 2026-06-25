@@ -1,28 +1,32 @@
-// Feedmark background — alarm-driven poll of the feed read from a bookmark.
+// Feedmark background — alarm-driven poll of a bookmark folder, kept in live sync.
 // All poll state lives in storage.local; nothing is held in memory across wakes.
 import browser from "webextension-polyfill";
 import { ALARM_NAME, ALARM_PERIOD_MINUTES, SOURCE_FOLDER_TITLE } from "./config.ts";
-import { loadFeeds, saveFeed, hasFeed, clearUnread } from "./storage.ts";
-import { feedsFromFolder } from "./source.ts";
+import { loadFeeds, saveFeed, saveFeeds, clearUnread } from "./storage.ts";
+import { feedsFromFolder, reconcile } from "./source.ts";
 import { pollAll } from "./poll.ts";
 import { totalUnread, badgeText } from "./badge.ts";
+import type { FeedRecord } from "./storage.ts";
 import type { GetItemsResponse } from "./messages.ts";
 
-// Scan the folder titled SOURCE_FOLDER_TITLE and register each child bookmark as
-// a feed source. Scanned once at init; live sync of folder edits arrives later in
-// iter 5. Only the FIRST sight of a bookmark writes a record — a re-scan never
-// clobbers accumulated state (baseline, seen-GUIDs, unread).
-async function registerFolderSources(): Promise<void> {
+// Scan the folder titled SOURCE_FOLDER_TITLE into fresh feed records — empty if
+// there's no such folder yet (popup then shows "No items yet.").
+async function scanFolder(): Promise<FeedRecord[]> {
   const matches = await browser.bookmarks.search({ title: SOURCE_FOLDER_TITLE });
   const folder = matches.find((node) => !node.url); // a folder has no url
-  if (!folder) return; // no Feedmark folder yet → popup shows "No items yet."
+  if (!folder) return [];
   const [tree] = await browser.bookmarks.getSubTree(folder.id);
-  if (!tree) return;
-  for (const record of feedsFromFolder(tree)) {
-    if (!(await hasFeed(record.id))) {
-      await saveFeed(record);
-    }
-  }
+  return tree ? feedsFromFolder(tree) : [];
+}
+
+// Bring the registry in line with the folder, then poll. Runs at init and on every
+// bookmark event, so add/rename/move/remove reflect without a reload. reconcile
+// preserves accumulated state and drops vanished feeds; the background stays the
+// single writer.
+async function resyncFolder(): Promise<void> {
+  const current = await loadFeeds();
+  await saveFeeds(reconcile(current, await scanFolder()));
+  await pollCycle();
 }
 
 async function refreshBadge(): Promise<void> {
@@ -38,11 +42,10 @@ async function pollCycle(): Promise<void> {
 }
 
 async function init(): Promise<void> {
-  await registerFolderSources();
   await browser.alarms.create(ALARM_NAME, {
     periodInMinutes: ALARM_PERIOD_MINUTES,
   });
-  await pollCycle(); // immediate first poll so the badge populates on load
+  await resyncFolder(); // scan + reconcile + first poll; badge populates on load
 }
 
 // The popup reads state through here. Read-only: it serves what the alarm poll
@@ -77,3 +80,11 @@ browser.runtime.onStartup.addListener(() => {
 browser.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) void pollCycle();
 });
+
+// Live folder sync: any add/rename/move/remove triggers a full rescan + reconcile.
+// Coarse by design — an unrelated bookmark edit just reconciles to a no-op — which
+// keeps the registry drift-free without per-event folder-membership bookkeeping.
+browser.bookmarks.onCreated.addListener(() => void resyncFolder());
+browser.bookmarks.onChanged.addListener(() => void resyncFolder());
+browser.bookmarks.onRemoved.addListener(() => void resyncFolder());
+browser.bookmarks.onMoved.addListener(() => void resyncFolder());

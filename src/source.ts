@@ -48,3 +48,23 @@ export function feedsFromFolder(folder: BookmarkNode): FeedRecord[] {
   }
   return feeds;
 }
+
+// Reconcile the stored registry against a fresh folder scan, returning the next
+// registry to persist. This is how live folder edits land: any bookmark event
+// triggers a rescan, and this merge derives the result drift-free —
+//   - a bookmark only in the scan  → added as a fresh (un-baselined) feed
+//   - a bookmark only in the registry → dropped (removed / moved out)
+//   - a bookmark in both, same url → kept with its accumulated state, new title
+//   - a bookmark in both, url changed → treated as a new feed (re-baselined)
+export function reconcile(current: FeedRecord[], scanned: FeedRecord[]): FeedRecord[] {
+  const byId = new Map(current.map((record) => [record.id, record]));
+  return scanned.map((fresh) => {
+    const existing = byId.get(fresh.id);
+    // Same bookmark, same url → keep accumulated state, just adopt any new title.
+    if (existing && existing.url === fresh.url) {
+      return { ...existing, title: fresh.title };
+    }
+    // New bookmark, or the url changed → the fresh (un-baselined) record stands.
+    return fresh;
+  });
+}

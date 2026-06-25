@@ -33,9 +33,12 @@ export async function saveFeed(record: FeedRecord): Promise<void> {
   await browser.storage.local.set({ [KEY]: map });
 }
 
-export async function hasFeed(id: string): Promise<boolean> {
-  const map = await readMap();
-  return id in map;
+// Replace the whole registry. Unlike saveFeed, feeds absent from `records` are
+// dropped — this is how reconcile persists removals after a folder rescan.
+export async function saveFeeds(records: FeedRecord[]): Promise<void> {
+  const map: Record<string, FeedRecord> = {};
+  for (const record of records) map[record.id] = record;
+  await browser.storage.local.set({ [KEY]: map });
 }
 
 // Zero one feed's unread count (the user opened it). No-op if it's gone. The
