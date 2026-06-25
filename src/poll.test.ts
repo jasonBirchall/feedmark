@@ -10,6 +10,7 @@ function record(over: Partial<FeedRecord> = {}): FeedRecord {
     origin: "https://x.test",
     seenGuids: [],
     unread: 0,
+    baselined: true, // default: an established feed; baseline tests pass false
     etag: null,
     lastModified: null,
     items: [],
@@ -33,13 +34,24 @@ function okFetch(body: string, headers: Record<string, string> = {}) {
   return async () => new Response(body, { status: 200, headers });
 }
 
-test("first poll counts every item as new", async () => {
-  const out = await pollFeed(record(), {
+test("first poll baselines every item as seen (no badge inflation)", async () => {
+  const out = await pollFeed(record({ baselined: false }), {
     fetchImpl: okFetch(rssWith(["a", "b", "c"])),
   });
   assert.ok(out);
-  assert.equal(out.unread, 3);
-  assert.deepEqual(out.seenGuids, ["a", "b", "c"]);
+  assert.equal(out.unread, 0); // a freshly registered feed starts clean
+  assert.deepEqual(out.seenGuids, ["a", "b", "c"]); // all marked seen
+  assert.equal(out.baselined, true); // and won't baseline again
+});
+
+test("items appearing after baseline count as unread", async () => {
+  // already baselined on ["a", "b"]; only "c" is genuinely new
+  const out = await pollFeed(record({ seenGuids: ["a", "b"], baselined: true }), {
+    fetchImpl: okFetch(rssWith(["c", "a", "b"])),
+  });
+  assert.ok(out);
+  assert.equal(out.unread, 1);
+  assert.equal(out.seenGuids[0], "c");
 });
 
 test("re-polling the same items adds nothing", async () => {

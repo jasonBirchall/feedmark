@@ -14,6 +14,19 @@ export async function pollFeed(
   const items = parseFeed(result.body);
   if (items.length === 0) return null; // malformed / empty → do not advance etag
 
+  // First successful poll: baseline every current item as seen, unread untouched
+  // (0 at registration). No badge inflation on a freshly subscribed feed.
+  if (!record.baselined) {
+    return {
+      ...record,
+      baselined: true,
+      seenGuids: items.map((item) => item.guid).slice(0, MAX_SEEN_GUIDS),
+      etag: result.etag,
+      lastModified: result.lastModified,
+      items,
+    };
+  }
+
   const seen = new Set(record.seenGuids);
   const fresh: string[] = [];
   for (const item of items) {

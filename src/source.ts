@@ -24,6 +24,7 @@ export function feedFromBookmark(bm: BookmarkNode): FeedRecord | null {
     origin: parsed.origin,
     seenGuids: [],
     unread: 0,
+    baselined: false, // first poll will baseline current items as seen
     etag: null,
     lastModified: null,
     items: [],

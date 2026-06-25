@@ -10,6 +10,7 @@ function rec(unread: number): FeedRecord {
     origin: "https://x.test",
     seenGuids: [],
     unread,
+    baselined: true,
     etag: null,
     lastModified: null,
     items: [],

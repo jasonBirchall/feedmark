@@ -7,6 +7,9 @@ export type FeedRecord = {
   origin: string;
   seenGuids: string[];
   unread: number;
+  // False until the first successful poll, which baselines every current item as
+  // seen with unread 0 (THREAT_MODEL.md §4: no badge inflation on registration).
+  baselined: boolean;
   etag: string | null;
   lastModified: string | null;
   items: ParsedItem[];
