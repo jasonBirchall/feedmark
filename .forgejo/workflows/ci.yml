@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   guardrail:
-    runs-on: docker
+    runs-on: codeberg-small
     # Pin the toolchain image so the environment is reproducible. The full
     # (non-slim) node image is buildpack-deps based, so `make` is present and
     # no setup-node action is needed — one fewer third-party action to trust.
