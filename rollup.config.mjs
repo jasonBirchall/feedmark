@@ -4,12 +4,17 @@ import typescript from "@rollup/plugin-typescript";
 
 // One bundle per extension entry point. iife output keeps everything self-
 // contained (no module loading, no remote code) under the strict CSP.
-export default {
-  input: "src/background.ts",
+const entry = (input, file) => ({
+  input,
   output: {
-    file: "dist/background.js",
+    file,
     format: "iife",
     sourcemap: true,
   },
   plugins: [resolve({ browser: true }), commonjs(), typescript()],
-};
+});
+
+export default [
+  entry("src/background.ts", "dist/background.js"),
+  entry("src/popup.ts", "dist/popup.js"),
+];

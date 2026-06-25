@@ -7,7 +7,9 @@
     "service_worker": "background.js",
     "scripts": ["background.js"]
   },
-  "action": {},
+  "action": {
+    "default_popup": "popup.html"
+  },
   "permissions": ["alarms", "storage"],
   "host_permissions": ["https://blog.mozilla.org/*"],
   "browser_specific_settings": {

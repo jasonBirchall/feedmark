@@ -33,6 +33,7 @@ audit: ## Fail on high/critical dependency advisories (mirrors CI)
 build: clean ## Bundle the extension into dist/
 	npx rollup -c rollup.config.mjs
 	cp manifest.json dist/
+	cp src/popup.html dist/
 
 run: build ## Load the extension in Firefox with live-reload
 	npx web-ext run --source-dir=dist --devtools --start-url "about:debugging#/runtime/this-firefox"

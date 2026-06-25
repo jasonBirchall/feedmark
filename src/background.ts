@@ -5,6 +5,7 @@ import { ALARM_NAME, ALARM_PERIOD_MINUTES } from "./config.ts";
 import { ensureSeedFeeds, loadFeeds, saveFeed } from "./storage.ts";
 import { pollAll } from "./poll.ts";
 import { totalUnread, badgeText } from "./badge.ts";
+import type { GetItemsResponse } from "./messages.ts";
 
 async function refreshBadge(): Promise<void> {
   const feeds = await loadFeeds();
@@ -25,6 +26,16 @@ async function init(): Promise<void> {
   });
   await pollCycle(); // immediate first poll so the badge populates on load
 }
+
+// The popup reads state through here. Read-only: it serves what the alarm poll
+// already stored, and never triggers a fetch — so opening the popup makes no
+// network request. Returning a Promise replies with its resolved value.
+browser.runtime.onMessage.addListener((message: unknown): Promise<GetItemsResponse> | undefined => {
+  if ((message as { type?: unknown })?.type === "getItems") {
+    return loadFeeds().then((feeds) => ({ items: feeds.flatMap((f) => f.items) }));
+  }
+  return undefined; // not ours
+});
 
 browser.runtime.onInstalled.addListener(() => {
   void init();
