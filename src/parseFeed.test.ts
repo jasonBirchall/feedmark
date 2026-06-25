@@ -19,6 +19,11 @@ const RSS_NO_GUID = `<?xml version="1.0"?>
   <item><title>A</title><link>https://x.test/a</link></item>
 </channel></rss>`;
 
+const RSS_NO_TITLE = `<?xml version="1.0"?>
+<rss version="2.0"><channel>
+  <item><link>https://x.test/a</link><guid>guid-a</guid></item>
+</channel></rss>`;
+
 // Classic billion-laughs entity expansion.
 const BILLION_LAUGHS = `<?xml version="1.0"?>
 <!DOCTYPE lolz [
@@ -35,10 +40,31 @@ test("extracts RSS guids", () => {
   );
 });
 
+test("extracts RSS titles", () => {
+  assert.deepEqual(
+    parseFeed(RSS).map((i) => i.title),
+    ["A", "B"],
+  );
+});
+
 test("extracts Atom ids, falling back to link", () => {
   assert.deepEqual(
     parseFeed(ATOM).map((i) => i.guid),
     ["atom-a", "https://x.test/b"],
+  );
+});
+
+test("extracts Atom titles", () => {
+  assert.deepEqual(
+    parseFeed(ATOM).map((i) => i.title),
+    ["A", "B"],
+  );
+});
+
+test("title is empty string when absent", () => {
+  assert.deepEqual(
+    parseFeed(RSS_NO_TITLE).map((i) => i.title),
+    [""],
   );
 });
 

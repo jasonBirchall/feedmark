@@ -1,7 +1,7 @@
 import { XMLParser } from "fast-xml-parser";
 import { MAX_ITEMS } from "./config.ts";
 
-export type ParsedItem = { guid: string };
+export type ParsedItem = { guid: string; title: string };
 
 // processEntities:false disables custom/DOCTYPE entity expansion, closing the
 // billion-laughs vector. fast-xml-parser does not resolve external entities.
@@ -61,8 +61,9 @@ export function parseFeed(xml: string): ParsedItem[] {
   for (const node of raw) {
     if (items.length >= MAX_ITEMS) break;
     if (!node || typeof node !== "object") continue;
-    const guid = pickGuid(node as Record<string, unknown>);
-    if (guid) items.push({ guid });
+    const record = node as Record<string, unknown>;
+    const guid = pickGuid(record);
+    if (guid) items.push({ guid, title: textOf(record["title"]) });
   }
   return items;
 }
