@@ -5,9 +5,10 @@ import { ALARM_NAME, ALARM_PERIOD_MINUTES, SOURCE_FOLDER_TITLE } from "./config.
 import { loadFeeds, saveFeed, saveFeeds, clearUnread } from "./storage.ts";
 import { feedsFromFolder, reconcile } from "./source.ts";
 import { pollAll } from "./poll.ts";
+import { resolveSubscription } from "./subscribe.ts";
 import { totalUnread, badgeText } from "./badge.ts";
 import type { FeedRecord } from "./storage.ts";
-import type { GetItemsResponse } from "./messages.ts";
+import type { GetItemsResponse, SubscribeResponse } from "./messages.ts";
 
 // Scan the folder titled SOURCE_FOLDER_TITLE into fresh feed records — empty if
 // there's no such folder yet (popup then shows "No items yet.").
@@ -41,6 +42,23 @@ async function pollCycle(): Promise<void> {
   await refreshBadge();
 }
 
+// Subscribe a source to a pasted feed URL. The fetch + validation live in the pure
+// resolveSubscription; here we just load the record, persist a success, and refresh
+// the badge. Returns a typed reply the popup renders.
+async function handleSubscribe(id: string, feedUrl: string): Promise<SubscribeResponse> {
+  const record = (await loadFeeds()).find((f) => f.id === id);
+  if (!record) return { ok: false, reason: "unreachable" }; // bookmark vanished meanwhile
+  const outcome = await resolveSubscription(record, feedUrl);
+  if (!outcome.ok) return { ok: false, reason: outcome.reason };
+  await saveFeed(outcome.record);
+  await refreshBadge();
+  const r = outcome.record;
+  return {
+    ok: true,
+    source: { id: r.id, url: r.url, title: r.title, unread: r.unread, items: r.items },
+  };
+}
+
 async function init(): Promise<void> {
   await browser.alarms.create(ALARM_NAME, {
     periodInMinutes: ALARM_PERIOD_MINUTES,
@@ -51,25 +69,35 @@ async function init(): Promise<void> {
 // The popup reads state through here. Read-only: it serves what the alarm poll
 // already stored, and never triggers a fetch — so opening the popup makes no
 // network request. Returning a Promise replies with its resolved value.
-browser.runtime.onMessage.addListener((message: unknown): Promise<GetItemsResponse> | undefined => {
-  const msg = message as { type?: unknown; id?: unknown };
-  if (msg?.type === "getItems") {
-    return loadFeeds().then((feeds) => ({
-      sources: feeds.map((f) => ({
-        id: f.id,
-        url: f.url,
-        title: f.title,
-        unread: f.unread,
-        items: f.items,
-      })),
-    }));
-  }
-  // Opening a source clears its count; recompute the badge from the new state.
-  if (msg?.type === "clearUnread" && typeof msg.id === "string") {
-    void clearUnread(msg.id).then(refreshBadge);
-  }
-  return undefined; // not ours, or fire-and-forget with no reply
-});
+browser.runtime.onMessage.addListener(
+  (message: unknown): Promise<GetItemsResponse | SubscribeResponse> | undefined => {
+    const msg = message as { type?: unknown; id?: unknown; feedUrl?: unknown };
+    if (msg?.type === "getItems") {
+      return loadFeeds().then((feeds) => ({
+        sources: feeds.map((f) => ({
+          id: f.id,
+          url: f.url,
+          title: f.title,
+          unread: f.unread,
+          items: f.items,
+        })),
+      }));
+    }
+    // Subscribe a no-feed source to a pasted feed URL; reply with the resolved source.
+    if (
+      msg?.type === "subscribe" &&
+      typeof msg.id === "string" &&
+      typeof msg.feedUrl === "string"
+    ) {
+      return handleSubscribe(msg.id, msg.feedUrl);
+    }
+    // Opening a source clears its count; recompute the badge from the new state.
+    if (msg?.type === "clearUnread" && typeof msg.id === "string") {
+      void clearUnread(msg.id).then(refreshBadge);
+    }
+    return undefined; // not ours, or fire-and-forget with no reply
+  },
+);
 
 browser.runtime.onInstalled.addListener(() => {
   void init();
