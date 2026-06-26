@@ -55,7 +55,14 @@ async function handleSubscribe(id: string, feedUrl: string): Promise<SubscribeRe
   const r = outcome.record;
   return {
     ok: true,
-    source: { id: r.id, url: r.url, title: r.title, unread: r.unread, items: r.items },
+    source: {
+      id: r.id,
+      url: r.url,
+      title: r.title,
+      unread: r.unread,
+      items: r.items,
+      state: "feed",
+    },
   };
 }
 
@@ -80,6 +87,7 @@ browser.runtime.onMessage.addListener(
           title: f.title,
           unread: f.unread,
           items: f.items,
+          state: f.resolution,
         })),
       }));
     }

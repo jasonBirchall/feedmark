@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { renderItems, renderSources } from "./render.ts";
 import { parseFeed } from "./parseFeed.ts";
 import type { ParsedItem } from "./parseFeed.ts";
-import type { FeedView } from "./messages.ts";
+import type { FeedView, SubscribeResponse } from "./messages.ts";
 
 // A minimal fake DOM. Its whole job is to prove the render path uses textContent
 // and NEVER innerHTML: the innerHTML setter throws, so any use fails the test.
@@ -11,6 +11,10 @@ class FakeEl {
   readonly tag: string;
   readonly children: FakeEl[] = [];
   href = "";
+  value = "";
+  disabled = false;
+  type = "";
+  placeholder = "";
   #text = "";
   #listeners: Record<string, Array<() => void>> = {};
   constructor(tag: string) {
@@ -91,12 +95,30 @@ test("an onerror img payload renders as inert text", () => {
 });
 
 function view(over: Partial<FeedView> = {}): FeedView {
-  return { id: "s", url: "https://s.test/", title: "Source", unread: 0, items: [], ...over };
+  return {
+    id: "s",
+    url: "https://s.test/",
+    title: "Source",
+    unread: 0,
+    items: [],
+    state: "feed",
+    ...over,
+  };
 }
 
-function renderSrc(sources: FeedView[], onOpen: (id: string) => void = () => {}): FakeEl {
+function renderSrc(
+  sources: FeedView[],
+  onOpen: (id: string) => void = () => {},
+  onSubscribe: (id: string, feedUrl: string) => Promise<SubscribeResponse> = async () => ({
+    ok: false,
+    reason: "no-feed",
+  }),
+): FakeEl {
   const doc = new FakeDoc();
-  return renderSources(sources, doc as unknown as Document, onOpen) as unknown as FakeEl;
+  return renderSources(sources, doc as unknown as Document, {
+    onOpen,
+    onSubscribe,
+  }) as unknown as FakeEl;
 }
 
 test("renders one labelled section per source with its unread count", () => {
@@ -124,6 +146,40 @@ test("a <script> payload in a source title renders as inert text", () => {
   const root = renderSrc([view({ title: payload, unread: 1 })]);
   const heading = root.children[0]?.children[0];
   assert.equal(heading?.textContent, `${payload} (1)`);
+});
+
+test("a no-feed source renders a paste field instead of items", () => {
+  const root = renderSrc([view({ title: "Simon Willison", state: "no-feed" })]);
+  const section = root.children[0];
+  const heading = section?.children[0];
+  assert.equal(heading?.textContent, "Simon Willison"); // no "(0)" count on a no-feed source
+  // The block after the heading holds the paste UI: a label, an input, a button.
+  const block = section?.children[1];
+  const tags = block?.children.map((c) => c.tag);
+  assert.ok(tags?.includes("input"));
+  assert.ok(tags?.includes("button"));
+  const button = block?.children.find((c) => c.tag === "button");
+  assert.equal(button?.textContent, "Subscribe");
+});
+
+test("subscribing with an http url shows the inline https error", async () => {
+  const root = renderSrc(
+    [view({ id: "x", state: "no-feed" })],
+    () => {},
+    async () => ({
+      ok: false,
+      reason: "not-https",
+    }),
+  );
+  const block = root.children[0]?.children[1];
+  const input = block?.children.find((c) => c.tag === "input");
+  const button = block?.children.find((c) => c.tag === "button");
+  const status = block?.children.find((c) => c.tag === "span");
+  if (input) input.value = "http://site.test/feed";
+  button?.click();
+  await new Promise((resolve) => setTimeout(resolve, 0)); // flush the async handler
+  assert.equal(status?.textContent, "Only https feeds are allowed.");
+  assert.equal(button?.disabled, false); // re-enabled so the human can correct it
 });
 
 test("a source heading links to its site and signals a clear on click", () => {

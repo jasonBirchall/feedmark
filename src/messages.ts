@@ -1,5 +1,6 @@
 import type { ParsedItem } from "./parseFeed.ts";
 import type { SubscribeReason } from "./subscribe.ts";
+import type { FeedResolution } from "./storage.ts";
 
 // The popup <-> background message protocol. Typed in one place so both ends
 // stay in sync. The popup only ever READS state (it messages the background,
@@ -15,6 +16,7 @@ export type FeedView = {
   title: string;
   unread: number;
   items: ParsedItem[];
+  state: FeedResolution; // "feed" → show items; otherwise → show the paste field
 };
 
 export type GetItemsResponse = { sources: FeedView[] };
