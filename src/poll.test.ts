@@ -8,10 +8,11 @@ function record(over: Partial<FeedRecord> = {}): FeedRecord {
     id: "f",
     title: "f",
     url: "https://x.test/feed",
+    feedUrl: null,
     origin: "https://x.test",
     seenGuids: [],
     unread: 0,
-    baselined: true, // default: an established feed; baseline tests pass false
+    resolution: "feed", // default: an established feed; baseline tests pass "pending"
     etag: null,
     lastModified: null,
     items: [],
@@ -36,18 +37,18 @@ function okFetch(body: string, headers: Record<string, string> = {}) {
 }
 
 test("first poll baselines every item as seen (no badge inflation)", async () => {
-  const out = await pollFeed(record({ baselined: false }), {
+  const out = await pollFeed(record({ resolution: "pending" }), {
     fetchImpl: okFetch(rssWith(["a", "b", "c"])),
   });
   assert.ok(out);
   assert.equal(out.unread, 0); // a freshly registered feed starts clean
   assert.deepEqual(out.seenGuids, ["a", "b", "c"]); // all marked seen
-  assert.equal(out.baselined, true); // and won't baseline again
+  assert.equal(out.resolution, "feed"); // and won't baseline again
 });
 
 test("items appearing after baseline count as unread", async () => {
   // already baselined on ["a", "b"]; only "c" is genuinely new
-  const out = await pollFeed(record({ seenGuids: ["a", "b"], baselined: true }), {
+  const out = await pollFeed(record({ seenGuids: ["a", "b"], resolution: "feed" }), {
     fetchImpl: okFetch(rssWith(["c", "a", "b"])),
   });
   assert.ok(out);
@@ -116,6 +117,48 @@ test("seenGuids is bounded to MAX_SEEN_GUIDS", async () => {
   const out = await pollFeed(record(), { fetchImpl: okFetch(rssWith(guids)) });
   assert.ok(out);
   assert.equal(out.seenGuids.length, 200);
+});
+
+test("a fetched-but-unparseable bookmark becomes no-feed (not null)", async () => {
+  const out = await pollFeed(record({ resolution: "pending", etag: 'W/"old"' }), {
+    fetchImpl: okFetch("<html>not a feed</html>", { ETag: 'W/"new"' }),
+  });
+  assert.ok(out);
+  assert.equal(out.resolution, "no-feed");
+  assert.equal(out.etag, 'W/"old"'); // unparseable body is never last-good: etag NOT advanced
+});
+
+test("an already-no-feed bookmark with still no feed yields null (no needless write)", async () => {
+  const out = await pollFeed(record({ resolution: "no-feed" }), {
+    fetchImpl: okFetch("<html>still not a feed</html>"),
+  });
+  assert.equal(out, null);
+});
+
+test("a transient fetch failure leaves resolution untouched", async () => {
+  const out = await pollFeed(record({ resolution: "feed" }), {
+    fetchImpl: async () => new Response(null, { status: 500 }),
+  });
+  assert.equal(out, null); // unchanged: caller keeps the last-good "feed" record
+});
+
+test("poll fetches the pasted feed url, not the bookmark url", async () => {
+  let fetched = "";
+  const out = await pollFeed(
+    record({
+      url: "https://site.test/",
+      feedUrl: "https://site.test/atom.xml",
+      resolution: "pending",
+    }),
+    {
+      fetchImpl: async (url) => {
+        fetched = String(url);
+        return new Response(rssWith(["a"]), { status: 200 });
+      },
+    },
+  );
+  assert.ok(out);
+  assert.equal(fetched, "https://site.test/atom.xml");
 });
 
 test("pollAll isolates a throwing feed from a healthy sibling", async () => {

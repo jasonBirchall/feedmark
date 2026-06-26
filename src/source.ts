@@ -1,4 +1,5 @@
 import type { FeedRecord } from "./storage.ts";
+import type { FetchInput } from "./fetchFeed.ts";
 
 // A minimal structural view of a bookmark node — only the fields we need. Keeps
 // this module free of webextension-polyfill (which throws on import outside a
@@ -27,10 +28,11 @@ export function feedFromBookmark(bm: BookmarkNode): FeedRecord | null {
     id: bm.id,
     title: bm.title,
     url: bm.url,
+    feedUrl: null, // no manual override yet; poll the bookmark URL itself
     origin: parsed.origin,
     seenGuids: [],
     unread: 0,
-    baselined: false, // first poll will baseline current items as seen
+    resolution: "pending", // first poll decides feed vs no-feed
     etag: null,
     lastModified: null,
     items: [],
@@ -47,6 +49,18 @@ export function feedsFromFolder(folder: BookmarkNode): FeedRecord[] {
     if (record) feeds.push(record);
   }
   return feeds;
+}
+
+// What we actually fetch: the pasted feed if present, else the bookmark URL itself.
+// `origin` is already pinned to that target's origin (by feedFromBookmark, or by
+// subscribe when a feed is pasted), so redirects are checked against the right host.
+export function fetchTarget(record: FeedRecord): FetchInput {
+  return {
+    url: record.feedUrl ?? record.url,
+    origin: record.origin,
+    etag: record.etag,
+    lastModified: record.lastModified,
+  };
 }
 
 // Reconcile the stored registry against a fresh folder scan, returning the next

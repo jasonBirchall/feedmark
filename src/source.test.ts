@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { feedFromBookmark, feedsFromFolder, reconcile } from "./source.ts";
+import { feedFromBookmark, feedsFromFolder, reconcile, fetchTarget } from "./source.ts";
 import type { FeedRecord } from "./storage.ts";
 
 function feed(over: Partial<FeedRecord> = {}): FeedRecord {
@@ -8,10 +8,11 @@ function feed(over: Partial<FeedRecord> = {}): FeedRecord {
     id: "a",
     title: "A",
     url: "https://a.test/feed",
+    feedUrl: null,
     origin: "https://a.test",
     seenGuids: [],
     unread: 0,
-    baselined: false,
+    resolution: "pending",
     etag: null,
     lastModified: null,
     items: [],
@@ -29,6 +30,8 @@ test("an https bookmark becomes a fresh feed record", () => {
   assert.equal(rec?.title, "Mozilla Blog");
   assert.equal(rec?.url, "https://blog.mozilla.org/feed/");
   assert.equal(rec?.origin, "https://blog.mozilla.org");
+  assert.equal(rec?.feedUrl, null);
+  assert.equal(rec?.resolution, "pending");
   assert.deepEqual(rec?.seenGuids, []);
   assert.equal(rec?.unread, 0);
   assert.deepEqual(rec?.items, []);
@@ -101,9 +104,9 @@ test("an empty folder yields no feeds", () => {
 });
 
 test("reconcile adds a newly-scanned bookmark as a fresh feed", () => {
-  const current = [feed({ id: "a", baselined: true, unread: 2 })];
+  const current = [feed({ id: "a", resolution: "feed", unread: 2 })];
   const scanned = [
-    feed({ id: "a", baselined: false }),
+    feed({ id: "a", resolution: "pending" }),
     feed({ id: "b", title: "B", url: "https://b.test/feed", origin: "https://b.test" }),
   ];
   const next = reconcile(current, scanned);
@@ -112,7 +115,7 @@ test("reconcile adds a newly-scanned bookmark as a fresh feed", () => {
     ["a", "b"],
   );
   assert.equal(next.find((f) => f.id === "a")?.unread, 2); // existing state kept
-  assert.equal(next.find((f) => f.id === "b")?.baselined, false); // new feed baselines on first poll
+  assert.equal(next.find((f) => f.id === "b")?.resolution, "pending"); // new feed baselines on first poll
 });
 
 test("reconcile drops a bookmark no longer in the scan", () => {
@@ -125,23 +128,36 @@ test("reconcile drops a bookmark no longer in the scan", () => {
 });
 
 test("reconcile keeps state but adopts the new title on rename", () => {
-  const current = [feed({ id: "a", title: "Old", unread: 5, baselined: true, seenGuids: ["x"] })];
+  const current = [
+    feed({ id: "a", title: "Old", unread: 5, resolution: "feed", seenGuids: ["x"] }),
+  ];
   const scanned = [feed({ id: "a", title: "New" })]; // same url
   const a = reconcile(current, scanned)[0];
   assert.equal(a?.title, "New");
   assert.equal(a?.unread, 5);
-  assert.equal(a?.baselined, true);
+  assert.equal(a?.resolution, "feed");
   assert.deepEqual(a?.seenGuids, ["x"]);
+});
+
+test("fetchTarget fetches the bookmark url when no feed is pasted", () => {
+  const t = fetchTarget(feed({ url: "https://a.test/", feedUrl: null }));
+  assert.equal(t.url, "https://a.test/");
+});
+
+test("fetchTarget fetches the pasted feed url when present", () => {
+  const t = fetchTarget(feed({ url: "https://a.test/", feedUrl: "https://a.test/atom.xml" }));
+  assert.equal(t.url, "https://a.test/atom.xml");
+  assert.equal(t.origin, "https://a.test"); // the record's pinned origin
 });
 
 test("reconcile re-baselines a bookmark whose url changed", () => {
   const current = [
-    feed({ id: "a", url: "https://a.test/feed", unread: 5, baselined: true, seenGuids: ["x"] }),
+    feed({ id: "a", url: "https://a.test/feed", unread: 5, resolution: "feed", seenGuids: ["x"] }),
   ];
   const scanned = [feed({ id: "a", url: "https://a.test/rss" })]; // fresh, different url
   const a = reconcile(current, scanned)[0];
   assert.equal(a?.url, "https://a.test/rss");
-  assert.equal(a?.baselined, false); // different feed → no inflation from stale GUIDs
+  assert.equal(a?.resolution, "pending"); // different feed → no inflation from stale GUIDs
   assert.equal(a?.unread, 0);
   assert.deepEqual(a?.seenGuids, []);
 });

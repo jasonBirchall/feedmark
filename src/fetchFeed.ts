@@ -10,7 +10,7 @@ export type FetchResult =
   | { kind: "notModified" }
   | { kind: "failed"; reason: string };
 
-type FetchInput = {
+export type FetchInput = {
   url: string;
   origin: string;
   etag: string | null;

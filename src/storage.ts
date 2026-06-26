@@ -1,16 +1,20 @@
 import browser from "webextension-polyfill";
 import type { ParsedItem } from "./parseFeed.ts";
 
+export type FeedResolution = "pending" | "feed" | "no-feed";
+
 export type FeedRecord = {
   id: string;
   title: string;
-  url: string;
-  origin: string;
+  url: string; // the bookmark's own URL — the click-through ("open the source")
+  feedUrl: string | null; // manually-pasted feed; null → fetch `url` itself
+  origin: string; // pinned to the FETCH target's origin (feedUrl's if set, else url's)
   seenGuids: string[];
   unread: number;
-  // False until the first successful poll, which baselines every current item as
-  // seen with unread 0 (THREAT_MODEL.md §4: no badge inflation on registration).
-  baselined: boolean;
+  // "pending": registered, not yet conclusively probed. "feed": fetched OK with ≥1
+  // item — the first such poll baselines every item as seen with unread 0
+  // (THREAT_MODEL.md §4: no badge inflation). "no-feed": fetched OK but 0 items.
+  resolution: FeedResolution;
   etag: string | null;
   lastModified: string | null;
   items: ParsedItem[];

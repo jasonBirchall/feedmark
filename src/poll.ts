@@ -1,30 +1,49 @@
 import { fetchFeed } from "./fetchFeed.ts";
 import { parseFeed } from "./parseFeed.ts";
+import { fetchTarget } from "./source.ts";
 import { MAX_SEEN_GUIDS, MAX_CONCURRENCY } from "./config.ts";
 import type { FeedRecord } from "./storage.ts";
+import type { ParsedItem } from "./parseFeed.ts";
+
+// First successful feed poll baselines every current item as seen (unread untouched,
+// 0 at registration — no badge inflation). Shared by the poll loop and subscribe.
+export function baseline(
+  record: FeedRecord,
+  items: ParsedItem[],
+  etag: string | null,
+  lastModified: string | null,
+): FeedRecord {
+  return {
+    ...record,
+    resolution: "feed",
+    seenGuids: items.map((item) => item.guid).slice(0, MAX_SEEN_GUIDS),
+    etag,
+    lastModified,
+    items,
+  };
+}
 
 export async function pollFeed(
   record: FeedRecord,
   opts: { fetchImpl?: typeof fetch } = {},
 ): Promise<FeedRecord | null> {
   const fetchOpts = opts.fetchImpl ? { fetchImpl: opts.fetchImpl } : {};
-  const result = await fetchFeed(record, fetchOpts);
-  if (result.kind !== "ok") return null; // notModified / failed → untouched
+  const result = await fetchFeed(fetchTarget(record), fetchOpts);
+  if (result.kind !== "ok") return null; // notModified / failed → resolution untouched
 
   const items = parseFeed(result.body);
-  if (items.length === 0) return null; // malformed / empty → do not advance etag
+  if (items.length === 0) {
+    // Fetched OK but nothing parseable. An ESTABLISHED feed serving a momentarily
+    // bad/empty body is transient → keep its last-good state (never overwrite it).
+    // Only a not-yet-established source becomes "no-feed" so the popup offers the
+    // paste field; do NOT advance etag — an unparseable body is never last-good.
+    if (record.resolution === "feed" || record.resolution === "no-feed") return null;
+    return { ...record, resolution: "no-feed" };
+  }
 
-  // First successful poll: baseline every current item as seen, unread untouched
-  // (0 at registration). No badge inflation on a freshly subscribed feed.
-  if (!record.baselined) {
-    return {
-      ...record,
-      baselined: true,
-      seenGuids: items.map((item) => item.guid).slice(0, MAX_SEEN_GUIDS),
-      etag: result.etag,
-      lastModified: result.lastModified,
-      items,
-    };
+  // First successful feed poll baselines; an established feed counts new items below.
+  if (record.resolution !== "feed") {
+    return baseline(record, items, result.etag, result.lastModified);
   }
 
   const seen = new Set(record.seenGuids);
