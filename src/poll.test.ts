@@ -1,7 +1,36 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pollFeed, pollAll } from "./poll.ts";
+import { pollFeed, pollAll, type PollLogger } from "./poll.ts";
 import type { FeedRecord } from "./storage.ts";
+
+// A logger that records what autodiscovery narrated, so tests assert on the reason.
+function capture(): { logger: PollLogger; logs: { level: string; msg: string }[] } {
+  const logs: { level: string; msg: string }[] = [];
+  return {
+    logs,
+    logger: {
+      info: (...a: unknown[]) => logs.push({ level: "info", msg: a.join(" ") }),
+      warn: (...a: unknown[]) => logs.push({ level: "warn", msg: a.join(" ") }),
+    },
+  };
+}
+
+// Dispatch fetches by URL, so a homepage and its discovered feed can each respond.
+function routeFetch(
+  routes: Record<string, () => Response>,
+  onCall?: (url: string) => void,
+): typeof fetch {
+  return (async (url: RequestInfo | URL) => {
+    const u = String(url);
+    onCall?.(u);
+    return (routes[u] ?? (() => new Response(null, { status: 404 })))();
+  }) as typeof fetch;
+}
+
+// An HTML page that advertises a single feed at `href`.
+function pageAdvertising(href: string): string {
+  return `<!doctype html><head><link rel="alternate" type="application/rss+xml" href="${href}"></head>`;
+}
 
 function record(over: Partial<FeedRecord> = {}): FeedRecord {
   return {
@@ -120,12 +149,114 @@ test("seenGuids is bounded to MAX_SEEN_GUIDS", async () => {
 });
 
 test("a fetched-but-unparseable bookmark becomes no-feed (not null)", async () => {
+  const { logger, logs } = capture();
   const out = await pollFeed(record({ resolution: "pending", etag: 'W/"old"' }), {
     fetchImpl: okFetch("<html>not a feed</html>", { ETag: 'W/"new"' }),
+    logger,
   });
   assert.ok(out);
   assert.equal(out.resolution, "no-feed");
   assert.equal(out.etag, 'W/"old"'); // unparseable body is never last-good: etag NOT advanced
+  assert.ok(logs.some((l) => l.level === "warn" && l.msg.includes("no feed link")));
+});
+
+test("autodiscovers a same-origin feed advertised by the bookmark page", async () => {
+  const { logger, logs } = capture();
+  let calls = 0;
+  const out = await pollFeed(
+    record({ url: "https://site.test/", origin: "https://site.test", resolution: "pending" }),
+    {
+      fetchImpl: routeFetch(
+        {
+          "https://site.test/": () =>
+            new Response(pageAdvertising("https://site.test/feed.xml"), { status: 200 }),
+          "https://site.test/feed.xml": () => new Response(rssWith(["a", "b"]), { status: 200 }),
+        },
+        () => {
+          calls += 1;
+        },
+      ),
+      logger,
+    },
+  );
+  assert.ok(out);
+  assert.equal(out.resolution, "feed");
+  assert.equal(out.feedUrl, "https://site.test/feed.xml"); // discovered feed pinned
+  assert.equal(out.origin, "https://site.test");
+  assert.equal(out.url, "https://site.test/"); // click-through unchanged
+  assert.equal(out.unread, 0); // baselined clean, no badge inflation
+  assert.deepEqual(out.seenGuids, ["a", "b"]);
+  assert.equal(calls, 2); // homepage + the one discovered feed, nothing more
+  assert.ok(logs.some((l) => l.level === "info" && l.msg.includes("autodiscovered feed")));
+});
+
+test("refuses a cross-origin-only advertised feed and never fetches it (the gate)", async () => {
+  const { logger, logs } = capture();
+  const fetched: string[] = [];
+  const out = await pollFeed(
+    record({ url: "https://site.test/", origin: "https://site.test", resolution: "pending" }),
+    {
+      fetchImpl: routeFetch(
+        {
+          "https://site.test/": () =>
+            new Response(pageAdvertising("https://feeds.evil.test/x.xml"), { status: 200 }),
+        },
+        (u) => fetched.push(u),
+      ),
+      logger,
+    },
+  );
+  assert.ok(out);
+  assert.equal(out.resolution, "no-feed"); // not auto-trusted → falls back to paste
+  assert.deepEqual(fetched, ["https://site.test/"]); // the off-origin feed is never fetched
+  assert.ok(logs.some((l) => l.level === "warn" && l.msg.includes("cross-origin")));
+});
+
+test("a page advertising no feed settles to no-feed with a warning", async () => {
+  const { logger, logs } = capture();
+  const out = await pollFeed(record({ url: "https://site.test/", resolution: "pending" }), {
+    fetchImpl: okFetch("<html><head><title>No feed here</title></head></html>"),
+    logger,
+  });
+  assert.ok(out);
+  assert.equal(out.resolution, "no-feed");
+  assert.ok(logs.some((l) => l.level === "warn" && l.msg.includes("no feed link")));
+});
+
+test("an unreachable discovered candidate stays pending to retry, not no-feed", async () => {
+  const { logger, logs } = capture();
+  const out = await pollFeed(
+    record({ url: "https://site.test/", origin: "https://site.test", resolution: "pending" }),
+    {
+      fetchImpl: routeFetch({
+        "https://site.test/": () =>
+          new Response(pageAdvertising("https://site.test/feed.xml"), { status: 200 }),
+        "https://site.test/feed.xml": () => new Response(null, { status: 503 }),
+      }),
+      logger,
+    },
+  );
+  assert.equal(out, null); // resolution untouched → still pending, next poll retries
+  assert.ok(logs.some((l) => l.level === "warn" && l.msg.includes("unreachable")));
+});
+
+test("a discovered candidate that isn't a feed settles to no-feed", async () => {
+  const { logger, logs } = capture();
+  const out = await pollFeed(
+    record({ url: "https://site.test/", origin: "https://site.test", resolution: "pending" }),
+    {
+      fetchImpl: routeFetch({
+        "https://site.test/": () =>
+          new Response(pageAdvertising("https://site.test/feed.xml"), { status: 200 }),
+        "https://site.test/feed.xml": () =>
+          new Response("<html>still not a feed</html>", { status: 200 }),
+      }),
+      logger,
+    },
+  );
+  assert.ok(out);
+  assert.equal(out.resolution, "no-feed");
+  assert.ok(logs.some((l) => l.level === "warn" && l.msg.includes("0 items")));
 });
 
 test("an already-no-feed bookmark with still no feed yields null (no needless write)", async () => {
