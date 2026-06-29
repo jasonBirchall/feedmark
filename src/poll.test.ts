@@ -61,6 +61,12 @@ function rssWithTitles(pairs: { guid: string; title: string }[]): string {
   return `<?xml version="1.0"?><rss version="2.0"><channel>${items}</channel></rss>`;
 }
 
+// Items carrying neither guid nor link — identified only by their title.
+function rssTitleOnly(titles: string[]): string {
+  const items = titles.map((t) => `<item><title>${t}</title></item>`).join("");
+  return `<?xml version="1.0"?><rss version="2.0"><channel>${items}</channel></rss>`;
+}
+
 function okFetch(body: string, headers: Record<string, string> = {}) {
   return async () => new Response(body, { status: 200, headers });
 }
@@ -139,6 +145,33 @@ test("malformed body does not advance etag (null)", async () => {
     fetchImpl: okFetch("not xml", { ETag: 'W/"new"' }),
   });
   assert.equal(out, null);
+});
+
+test("a title-identified item baselines clean and is not re-counted next poll", async () => {
+  // A feed whose items have only titles. The title is the synthesised identity;
+  // because it's stable across polls, the item is seen once and never re-counted.
+  const baselined = await pollFeed(record({ resolution: "pending" }), {
+    fetchImpl: okFetch(rssTitleOnly(["Daily News"])),
+  });
+  assert.ok(baselined);
+  assert.equal(baselined.unread, 0); // baselined, no badge inflation
+  assert.deepEqual(baselined.seenGuids, ["Daily News"]); // kept, identified by title
+
+  const repoll = await pollFeed(baselined, {
+    fetchImpl: okFetch(rssTitleOnly(["Daily News"])),
+  });
+  assert.ok(repoll);
+  assert.equal(repoll.unread, 0); // same title → same identity → not new
+});
+
+test("a feed reusing one guid across two items counts it once (no inflation)", async () => {
+  // A buggy/hostile feed hands two distinct items the same guid. Dedup collapses
+  // them to a single new item — an under-count, never the badge inflation AC1 guards.
+  const out = await pollFeed(record({ seenGuids: ["old"], unread: 0 }), {
+    fetchImpl: okFetch(rssWith(["dup", "dup"])),
+  });
+  assert.ok(out);
+  assert.equal(out.unread, 1); // one new identity, not two
 });
 
 test("seenGuids is bounded to MAX_SEEN_GUIDS", async () => {

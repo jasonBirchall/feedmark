@@ -34,12 +34,18 @@ function hrefOf(value: unknown): string {
   return textOf(first);
 }
 
+// Identity chain, most-to-least stable. The title fallback keeps an item that
+// carries neither guid nor link from being silently dropped (THREAT_MODEL.md §4 /
+// iter-8 AC1: "don't lose items"). It's a deliberate trade: the title is stable
+// across polls, so the same item keeps the same identity and is never re-counted;
+// two genuinely-different items sharing a title collapse to one — an under-count,
+// the safe direction, never the badge inflation the AC actually guards against.
 function rssGuid(item: Record<string, unknown>): string {
-  return textOf(item["guid"]) || textOf(item["link"]);
+  return textOf(item["guid"]) || textOf(item["link"]) || textOf(item["title"]);
 }
 
 function atomGuid(entry: Record<string, unknown>): string {
-  return textOf(entry["id"]) || hrefOf(entry["link"]);
+  return textOf(entry["id"]) || hrefOf(entry["link"]) || textOf(entry["title"]);
 }
 
 export function parseFeed(xml: string): ParsedItem[] {

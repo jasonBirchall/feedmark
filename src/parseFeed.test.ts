@@ -24,6 +24,23 @@ const RSS_NO_TITLE = `<?xml version="1.0"?>
   <item><link>https://x.test/a</link><guid>guid-a</guid></item>
 </channel></rss>`;
 
+// An item carrying neither guid nor link — only a title to identify it by.
+const RSS_TITLE_ONLY = `<?xml version="1.0"?>
+<rss version="2.0"><channel>
+  <item><title>Only a title</title></item>
+</channel></rss>`;
+
+const ATOM_TITLE_ONLY = `<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry><title>Only a title</title></entry>
+</feed>`;
+
+// Nothing to identify it by at all — no guid, no link, no title.
+const RSS_ANONYMOUS = `<?xml version="1.0"?>
+<rss version="2.0"><channel>
+  <item><description>body but no identity</description></item>
+</channel></rss>`;
+
 // Classic billion-laughs entity expansion.
 const BILLION_LAUGHS = `<?xml version="1.0"?>
 <!DOCTYPE lolz [
@@ -73,6 +90,18 @@ test("falls back to link when guid is missing", () => {
     parseFeed(RSS_NO_GUID).map((i) => i.guid),
     ["https://x.test/a"],
   );
+});
+
+test("keeps an RSS item with only a title, using the title as identity", () => {
+  assert.deepEqual(parseFeed(RSS_TITLE_ONLY), [{ guid: "Only a title", title: "Only a title" }]);
+});
+
+test("keeps an Atom entry with only a title, using the title as identity", () => {
+  assert.deepEqual(parseFeed(ATOM_TITLE_ONLY), [{ guid: "Only a title", title: "Only a title" }]);
+});
+
+test("drops an item with no guid, link, or title (nothing to identify it by)", () => {
+  assert.deepEqual(parseFeed(RSS_ANONYMOUS), []);
 });
 
 test("returns [] on malformed xml without throwing", () => {
