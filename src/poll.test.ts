@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { pollFeed, pollAll, type PollLogger } from "./poll.ts";
+import { MAX_ITEMS, MAX_SEEN_GUIDS } from "./config.ts";
 import type { FeedRecord } from "./storage.ts";
 
 // A logger that records what autodiscovery narrated, so tests assert on the reason.
@@ -179,6 +180,20 @@ test("seenGuids is bounded to MAX_SEEN_GUIDS", async () => {
   const out = await pollFeed(record(), { fetchImpl: okFetch(rssWith(guids)) });
   assert.ok(out);
   assert.equal(out.seenGuids.length, 200);
+});
+
+test("the stored record stays bounded — storage does not grow forever (retention)", async () => {
+  // A feed serving far more than the caps. Everything the poll persists into
+  // storage.local is bounded: the rendered items by MAX_ITEMS, the seen-GUID
+  // history by MAX_SEEN_GUIDS. So no single feed can grow a record without limit.
+  // (iter-8 AC2, the count-bound reading of retention — no time-based age-out.)
+  const guids = Array.from({ length: MAX_ITEMS + MAX_SEEN_GUIDS + 50 }, (_, n) => `g${n}`);
+  const out = await pollFeed(record({ resolution: "pending" }), {
+    fetchImpl: okFetch(rssWith(guids)),
+  });
+  assert.ok(out);
+  assert.equal(out.items.length, MAX_ITEMS); // the parse persisted to render is capped
+  assert.equal(out.seenGuids.length, MAX_SEEN_GUIDS); // the seen history is capped
 });
 
 test("a fetched-but-unparseable bookmark becomes no-feed (not null)", async () => {
