@@ -352,3 +352,42 @@ test("pollAll isolates a throwing feed from a healthy sibling", async () => {
     ["good"],
   );
 });
+
+test("a feed failing mid-batch yields no update, so its last-good is never wiped", async () => {
+  // Two ESTABLISHED feeds, each already carrying last-good state. One fails this
+  // poll (a non-throwing 500, the common case). The failed feed must produce no
+  // update at all — so the caller keeps its stored last-good untouched — while the
+  // healthy sibling still polls and counts its new item. AC3: one broken feed
+  // breaks neither the others nor their last-good state.
+  const healthy = record({
+    id: "healthy",
+    url: "https://healthy.test/feed",
+    origin: "https://healthy.test",
+    seenGuids: ["h1"],
+    items: [{ guid: "h1", title: "Healthy old" }],
+    unread: 0,
+  });
+  const broken = record({
+    id: "broken",
+    url: "https://broken.test/feed",
+    origin: "https://broken.test",
+    seenGuids: ["b1"],
+    items: [{ guid: "b1", title: "Broken last-good" }],
+    unread: 2,
+  });
+  const updates = await pollAll([broken, healthy], {
+    fetchImpl: async (url) =>
+      String(url).includes("broken.test")
+        ? new Response(null, { status: 500 }) // fails — not a throw
+        : new Response(rssWith(["h1", "h2"]), { status: 200 }), // one genuinely new item
+  });
+  // Broken feed absent from updates → its stored record (last-good) is left as-is.
+  assert.deepEqual(
+    updates.map((r) => r.id),
+    ["healthy"],
+  );
+  // Healthy sibling unaffected: still counts its new item onto its prior state.
+  const healthyUpdate = updates.find((r) => r.id === "healthy");
+  assert.ok(healthyUpdate);
+  assert.equal(healthyUpdate.unread, 1);
+});
