@@ -72,14 +72,43 @@ function okFetch(body: string, headers: Record<string, string> = {}) {
   return async () => new Response(body, { status: 200, headers });
 }
 
-test("first poll baselines every item as seen (no badge inflation)", async () => {
+test("first poll shows current items as unread (baseline-as-unread)", async () => {
   const out = await pollFeed(record({ resolution: "pending" }), {
     fetchImpl: okFetch(rssWith(["a", "b", "c"])),
   });
   assert.ok(out);
-  assert.equal(out.unread, 0); // a freshly registered feed starts clean
-  assert.deepEqual(out.seenGuids, ["a", "b", "c"]); // all marked seen
+  assert.equal(out.unread, 3); // its current items show as unread on first resolve
+  assert.deepEqual(out.seenGuids, ["a", "b", "c"]); // all tracked in the dedup history
   assert.equal(out.resolution, "feed"); // and won't baseline again
+});
+
+test("a feed with more than MAX_ITEMS shows at most MAX_ITEMS unread (bounded)", async () => {
+  // AC4: one registration can't inflate past the cap. items is already parser-capped,
+  // so unread = items.length can never exceed MAX_ITEMS — a hostile feed gets a
+  // bounded, annoying number, never "thousands".
+  const guids = Array.from({ length: MAX_ITEMS + 50 }, (_, n) => `g${n}`);
+  const out = await pollFeed(record({ resolution: "pending" }), {
+    fetchImpl: okFetch(rssWith(guids)),
+  });
+  assert.ok(out);
+  assert.equal(out.unread, MAX_ITEMS);
+});
+
+test("after its count is cleared, only a genuinely new item bumps it (not the backlog)", async () => {
+  // AC3: baseline shows all current items as unread...
+  const baselined = await pollFeed(record({ resolution: "pending" }), {
+    fetchImpl: okFetch(rssWith(["a", "b", "c"])),
+  });
+  assert.ok(baselined);
+  assert.equal(baselined.unread, 3);
+  // ...the user opens the source, clearing the count (as background/clearUnread does).
+  const cleared = { ...baselined, unread: 0 };
+  // A later poll with one genuinely new item bumps to 1 — the baselined a/b/c never return.
+  const out = await pollFeed(cleared, {
+    fetchImpl: okFetch(rssWith(["d", "a", "b", "c"])),
+  });
+  assert.ok(out);
+  assert.equal(out.unread, 1);
 });
 
 test("items appearing after baseline count as unread", async () => {
@@ -148,21 +177,21 @@ test("malformed body does not advance etag (null)", async () => {
   assert.equal(out, null);
 });
 
-test("a title-identified item baselines clean and is not re-counted next poll", async () => {
+test("a title-identified item shows as unread and is not re-counted next poll", async () => {
   // A feed whose items have only titles. The title is the synthesised identity;
   // because it's stable across polls, the item is seen once and never re-counted.
   const baselined = await pollFeed(record({ resolution: "pending" }), {
     fetchImpl: okFetch(rssTitleOnly(["Daily News"])),
   });
   assert.ok(baselined);
-  assert.equal(baselined.unread, 0); // baselined, no badge inflation
+  assert.equal(baselined.unread, 1); // shown as unread, identified by title
   assert.deepEqual(baselined.seenGuids, ["Daily News"]); // kept, identified by title
 
   const repoll = await pollFeed(baselined, {
     fetchImpl: okFetch(rssTitleOnly(["Daily News"])),
   });
   assert.ok(repoll);
-  assert.equal(repoll.unread, 0); // same title → same identity → not new
+  assert.equal(repoll.unread, 1); // same title → same identity → not re-counted (stays 1)
 });
 
 test("a feed reusing one guid across two items counts it once (no inflation)", async () => {
@@ -232,7 +261,7 @@ test("autodiscovers a same-origin feed advertised by the bookmark page", async (
   assert.equal(out.feedUrl, "https://site.test/feed.xml"); // discovered feed pinned
   assert.equal(out.origin, "https://site.test");
   assert.equal(out.url, "https://site.test/"); // click-through unchanged
-  assert.equal(out.unread, 0); // baselined clean, no badge inflation
+  assert.equal(out.unread, 2); // its two items show as unread
   assert.deepEqual(out.seenGuids, ["a", "b"]);
   assert.equal(calls, 2); // homepage + the one discovered feed, nothing more
   assert.ok(logs.some((l) => l.level === "info" && l.msg.includes("autodiscovered feed")));

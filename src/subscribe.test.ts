@@ -58,7 +58,7 @@ test("an unreachable https paste is reported unreachable", async () => {
   assert.deepEqual(out, { ok: false, reason: "unreachable" });
 });
 
-test("a valid feed paste subscribes: feedUrl set, origin re-pinned, baselined clean", async () => {
+test("a valid feed paste subscribes: feedUrl set, origin re-pinned, current items unread", async () => {
   const out = await resolveSubscription(record(), "https://feeds.example/atom.xml", {
     fetchImpl: okFetch(rssWith(["a", "b"])),
   });
@@ -67,7 +67,7 @@ test("a valid feed paste subscribes: feedUrl set, origin re-pinned, baselined cl
   assert.equal(out.record.feedUrl, "https://feeds.example/atom.xml");
   assert.equal(out.record.origin, "https://feeds.example"); // re-pinned to the pasted feed
   assert.equal(out.record.resolution, "feed");
-  assert.equal(out.record.unread, 0); // no badge inflation on subscribe
+  assert.equal(out.record.unread, 2); // its current items show as unread on subscribe
   assert.deepEqual(out.record.seenGuids, ["a", "b"]);
   assert.equal(out.record.url, "https://site.test/"); // click-through unchanged
 });

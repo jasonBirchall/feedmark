@@ -11,8 +11,11 @@ import type { ParsedItem } from "./parseFeed.ts";
 // console in the background. Success is info; every failure-to-resolve is warn.
 export type PollLogger = Pick<typeof console, "info" | "warn">;
 
-// First successful feed poll baselines every current item as seen (unread untouched,
-// 0 at registration — no badge inflation). Shared by the poll loop and subscribe.
+// First successful feed poll baselines: every current item is tracked in the dedup
+// history AND shown as unread (baseline-as-unread, iter 8.5 — THREAT_MODEL.md §4,
+// reversing the earlier baseline-all-seen). unread = items.length is itself bounded
+// by the parser's MAX_ITEMS cap, so a registration can't inflate past it. Shared by
+// the poll loop, subscribe, and autodiscover.
 export function baseline(
   record: FeedRecord,
   items: ParsedItem[],
@@ -23,6 +26,7 @@ export function baseline(
     ...record,
     resolution: "feed",
     seenGuids: items.map((item) => item.guid).slice(0, MAX_SEEN_GUIDS),
+    unread: items.length,
     etag,
     lastModified,
     items,
