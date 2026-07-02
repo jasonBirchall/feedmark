@@ -160,6 +160,8 @@ test("a source's items render as text beneath its heading", () => {
   );
 });
 
+// The render-invariant gate extended to bookmark titles: a source's heading is
+// derived text like any item title, and must reach the DOM as inert text only.
 test("a <script> payload in a source title renders as inert text", () => {
   const payload = `<script>alert(1)</script>`;
   const root = renderSrc([view({ title: payload, unread: 1 })]);
@@ -187,6 +189,24 @@ test("the count pill carries the zero marker class only at zero", () => {
   const counts = root.children.map((section) => section.children[0]?.children[1]);
   assert.equal(counts[0]?.className, "count");
   assert.equal(counts[1]?.className, "count zero");
+});
+
+// The stylesheet's hooks. A typo'd class name keeps every behavioural test
+// green while silently un-styling the popup, so pin each class popup.css
+// targets. count/zero are already pinned by the zero-marker test above.
+test("render emits the class hooks popup.css styles", () => {
+  const root = renderSrc([
+    view({ title: "A", unread: 1, items: [{ guid: "g", title: "T" }] }),
+    view({ id: "n", title: "B", state: "no-feed" }),
+  ]);
+  const fed = root.children[0];
+  assert.equal(fed?.className, "source");
+  assert.equal(fed?.children[0]?.className, "source-header");
+  assert.equal(fed?.children[0]?.children[0]?.className, "source-title");
+  assert.equal(fed?.children[1]?.className, "items");
+  const block = root.children[1]?.children[1];
+  assert.equal(block?.className, "no-feed");
+  assert.equal(block?.children.find((c) => c.tag === "span")?.className, "status");
 });
 
 test("subscribing with an http url shows the inline https error", async () => {
