@@ -23,9 +23,13 @@
   },
   "permissions": ["alarms", "storage", "bookmarks"],
   "host_permissions": ["https://*/*"],
+  "minimum_chrome_version": "121",
   "browser_specific_settings": {
     "gecko": {
-      "id": "feedmark@jasonbirchall.codeberg.org"
+      "id": "feedmark@jasonbirchall.codeberg.org",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
     }
   },
   "content_security_policy": {
