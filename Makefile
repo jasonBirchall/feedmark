@@ -34,6 +34,7 @@ build: clean ## Bundle the extension into dist/
 	npx rollup -c rollup.config.mjs
 	cp manifest.json dist/
 	cp src/popup.html dist/
+	cp src/popup.css dist/
 	cp -R icons dist/
 
 run: build ## Load the extension in Firefox with live-reload

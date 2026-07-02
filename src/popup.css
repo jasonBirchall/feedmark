@@ -1,0 +1,140 @@
+/* Feedmark popup — the quiet list (iter 8.75). Presentable, not designed: fixed
+   width, system font, hairline separators, dark mode via prefers-color-scheme.
+   All styling lives here (no inline styles); the accent matches the icon and the
+   toolbar badge (#e8590c). */
+
+:root {
+  --bg: #ffffff;
+  --heading: #15141a;
+  --item: #3f3e45;
+  --muted: #6f6e77;
+  --separator: #e5e5e5;
+  --chrome-border: #cccccc;
+  --chrome-bg: #f5f5f5;
+  --accent: #e8590c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #2b2a33;
+    --heading: #fbfbfe;
+    --item: #cfcfd8;
+    --muted: #8f8f9d;
+    --separator: #45444e;
+    --chrome-border: #52525e;
+    --chrome-bg: #3a3944;
+  }
+}
+
+body {
+  width: 360px;
+  max-height: 560px;
+  overflow-y: auto;
+  margin: 0;
+  background: var(--bg);
+  color: var(--item);
+  font-family: -apple-system, system-ui, sans-serif;
+  font-size: 13px;
+}
+
+/* The "No items yet." empty state (popup.ts). */
+main > p {
+  margin: 0;
+  padding: 10px 14px;
+  color: var(--muted);
+}
+
+.source {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--separator);
+}
+
+.source:last-child {
+  border-bottom: none;
+}
+
+.source-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.source-title,
+.source-title:visited {
+  font-weight: 600;
+  color: var(--heading);
+  text-decoration: none;
+}
+
+.count {
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 9px;
+  padding: 1px 7px;
+}
+
+.count.zero {
+  background: none;
+  color: var(--muted);
+  font-weight: 400;
+  padding: 0;
+}
+
+.items {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0 0 0 8px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* One scannable row per title (acceptance feedback, 2026-07-02): truncate to a
+   single line and lead with a muted dash so consecutive titles never blur into
+   a paragraph. Pure CSS — the render path and its tests are untouched. */
+.items li {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.items li::before {
+  content: "– ";
+  color: var(--muted);
+}
+
+.no-feed {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.no-feed p,
+.no-feed .status {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.no-feed input {
+  flex: 1;
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--item);
+}
+
+.no-feed button {
+  font-size: 12px;
+  padding: 4px 10px;
+  border: 1px solid var(--chrome-border);
+  border-radius: 4px;
+  background: var(--chrome-bg);
+  color: var(--heading);
+}

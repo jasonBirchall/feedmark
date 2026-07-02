@@ -70,6 +70,8 @@ async function init(): Promise<void> {
   await browser.alarms.create(ALARM_NAME, {
     periodInMinutes: ALARM_PERIOD_MINUTES,
   });
+  // Badge in the accent colour — matches the icon and --accent in popup.css.
+  await browser.action.setBadgeBackgroundColor({ color: "#e8590c" });
   await resyncFolder(); // scan + reconcile + first poll; badge populates on load
 }
 
