@@ -4,6 +4,7 @@
     "en-US": "An RSS reader built on your bookmarks. Point it at one bookmarks folder: each bookmark becomes a feed, with unread counts on the toolbar button and the latest items in the popup."
   },
   "version": {
-    "license": "Apache-2.0"
+    "license": "Apache-2.0",
+    "approval_notes": "Feedmark transmits no data anywhere: feeds are fetched directly from user-subscribed https origins and all state stays in storage.local, which is why data_collection_permissions declares 'none'. The wildcard https host permission exists because feed origins are user-chosen (bookmarks, or a pasted feed URL) and cannot be enumerated in advance; there are no content scripts and nothing reads pages the user visits. Built from TypeScript with rollup: the attached source package's BUILDING.md reproduces dist/ byte-for-byte (Node 22, npm ci --ignore-scripts, make build). Feed-derived strings reach the DOM via textContent only, under a strict CSP."
   }
 }
