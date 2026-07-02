@@ -7,7 +7,7 @@
     "type": "git",
     "url": "ssh://git@codeberg.org/jasonbirchall/feedmark.git"
   },
-  "license": "ISC",
+  "license": "Apache-2.0",
   "author": "jasonbirchall",
   "type": "module",
   "scripts": {

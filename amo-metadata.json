@@ -1,0 +1,9 @@
+{
+  "categories": ["feeds-news-blogging", "bookmarks"],
+  "summary": {
+    "en-US": "An RSS reader built on your bookmarks. Point it at one bookmarks folder: each bookmark becomes a feed, with unread counts on the toolbar button and the latest items in the popup."
+  },
+  "version": {
+    "license": "Apache-2.0"
+  }
+}

@@ -1,0 +1,64 @@
+# Feedmark release: a YubiKey-signed v* tag on main publishes to AMO.
+#
+# Trigger design: only a tag push starts this job, so
+# it is unreachable from fork PRs — forks can't push tags here, and Forgejo
+# withholds repo secrets from fork events regardless (secret-starved by
+# construction). Protect the v* tag pattern in repo Settings → Tags so only the
+# owner can push one; the tag signature is verified locally before pushing.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish-amo:
+    # codeberg-medium: the 10-minute cap fits the second npm ci inside
+    # verify-build plus the AMO upload; -small's 5 minutes is too tight.
+    runs-on: codeberg-medium
+    container:
+      image: node:22-bookworm
+    steps:
+      - uses: actions/checkout@9f698171ed81b15d1823a05fc7211befd50c8ae0 # v6.0.3
+        with:
+          persist-credentials: false
+
+      # A tag must release exactly what it names: refuse v1.2.3 on a manifest
+      # that says anything but 1.2.3.
+      - name: Guard tag matches manifest version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: test "v$(node -p 'require("./manifest.json").version')" = "$TAG"
+
+      - name: Install (exact-pinned, no install scripts)
+        run: make install
+
+      - name: Typecheck + tests
+        run: make typecheck test
+
+      # Builds dist/, cuts the AMO source package, and proves the package
+      # rebuilds byte-identical — the reproducible-build gate, enforced at the
+      # moment it matters most.
+      - name: Build + reproducibility proof
+        run: make verify-build
+
+      # One call submits the listed version AND attaches the source package
+      # (AMO API v5 via web-ext 8+). --approval-timeout=0 is fire-and-forget:
+      # the job succeeds once the upload is accepted; validation, signing and
+      # review complete on AMO's side. Secrets are scoped to this step only.
+      - name: Publish to AMO
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_API_KEY }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+        run: |
+          VERSION=$(node -p 'require("./manifest.json").version')
+          npx web-ext sign \
+            --source-dir=dist \
+            --channel=listed \
+            --amo-metadata=amo-metadata.json \
+            --upload-source-code="artifacts/feedmark-$VERSION-source.zip" \
+            --approval-timeout=0
