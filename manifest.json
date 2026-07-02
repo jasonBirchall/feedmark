@@ -3,12 +3,23 @@
   "name": "Feedmark",
   "version": "0.0.0",
   "description": "An RSS reader built on the bookmark tree.",
+  "icons": {
+    "16": "icons/feedmark-16.png",
+    "32": "icons/feedmark-32.png",
+    "48": "icons/feedmark-48.png",
+    "96": "icons/feedmark-96.png",
+    "128": "icons/feedmark-128.png"
+  },
   "background": {
     "service_worker": "background.js",
     "scripts": ["background.js"]
   },
   "action": {
-    "default_popup": "popup.html"
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/feedmark-16.png",
+      "32": "icons/feedmark-32.png"
+    }
   },
   "permissions": ["alarms", "storage", "bookmarks"],
   "host_permissions": ["https://*/*"],

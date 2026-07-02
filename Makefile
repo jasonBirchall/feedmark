@@ -2,7 +2,7 @@
 # they ever run in CI. Each target does exactly what it says.
 
 .DEFAULT_GOAL := help
-.PHONY: help install lint lint-ext audit format typecheck test build run clean
+.PHONY: help install lint lint-ext audit format typecheck test build run clean icons
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -34,9 +34,17 @@ build: clean ## Bundle the extension into dist/
 	npx rollup -c rollup.config.mjs
 	cp manifest.json dist/
 	cp src/popup.html dist/
+	cp -R icons dist/
 
 run: build ## Load the extension in Firefox with live-reload
 	npx web-ext run --source-dir=dist --devtools --start-url "about:debugging#/runtime/this-firefox"
 
 clean: ## Remove build output
 	rm -rf dist
+
+ICON_SIZES := 16 32 48 96 128
+
+icons: ## Regenerate PNG icons from icons/feedmark.svg (needs rsvg-convert via `brew install librsvg`; only when the SVG changes)
+	for size in $(ICON_SIZES); do \
+		rsvg-convert -w $$size -h $$size icons/feedmark.svg -o icons/feedmark-$$size.png; \
+	done

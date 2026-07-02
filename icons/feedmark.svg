@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Feedmark "ribbon feed" mark (iter 8.75): orange bookmark ribbon, white RSS
+       broadcast glyph. Source of truth for the committed PNGs beside it —
+       regenerate them with `make icons` whenever this file changes. -->
+  <path d="M17 4 h30 a4 4 0 0 1 4 4 v52 l-19 -14 -19 14 v-52 a4 4 0 0 1 4 -4 z" fill="#e8590c"/>
+  <circle cx="25" cy="42" r="4.5" fill="#fff"/>
+  <path d="M25 30 a12 12 0 0 1 12 12" stroke="#fff" stroke-width="5.5" fill="none" stroke-linecap="round"/>
+  <path d="M25 21 a21 21 0 0 1 21 21" stroke="#fff" stroke-width="5.5" fill="none" stroke-linecap="round"/>
+</svg>
