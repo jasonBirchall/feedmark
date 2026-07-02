@@ -2,7 +2,9 @@
 # they ever run in CI. Each target does exactly what it says.
 
 .DEFAULT_GOAL := help
-.PHONY: help install lint lint-ext audit format typecheck test build run clean icons
+.PHONY: help install lint lint-ext audit format typecheck test build run clean icons source-package verify-build
+
+VERSION := $(shell node -p "require('./manifest.json').version")
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -41,7 +43,28 @@ run: build ## Load the extension in Firefox with live-reload
 	npx web-ext run --source-dir=dist --devtools --start-url "about:debugging#/runtime/this-firefox"
 
 clean: ## Remove build output
-	rm -rf dist
+	rm -rf dist .verify-build
+
+# git archive packs TRACKED files only, so the git-ignored private docs
+# (PROJECT.md, THREAT_MODEL.md, ...) cannot leak into the reviewer package by
+# construction. BUILDING.md rides inside; AMO wants this as a zip.
+source-package: ## Zip the tracked source + build instructions for AMO review
+	mkdir -p artifacts
+	git archive --format=zip -o artifacts/feedmark-$(VERSION)-source.zip HEAD
+
+# The AMO admin reviewer rebuilds from the source package and diffs against the
+# submitted extension expecting NO differences (iter-9 gate). This target is that
+# check, run locally/in CI: rebuild from a pristine archive of HEAD, diff the two
+# dist trees. Extraction goes via tar, not the zip, because the CI image has no
+# unzip — both archives come from the same `git archive` of HEAD, so the tree is
+# identical. Run on a clean checkout: an uncommitted change to src/ would diff.
+verify-build: source-package build ## Prove the build reproduces from the source package (clean checkout)
+	rm -rf .verify-build
+	mkdir -p .verify-build
+	git archive --format=tar HEAD | tar -x -C .verify-build
+	cd .verify-build && npm ci --ignore-scripts && $(MAKE) build
+	diff -r dist .verify-build/dist
+	@echo "verify-build: dist/ and the source-package rebuild are identical"
 
 ICON_SIZES := 16 32 48 96 128
 

@@ -8,6 +8,8 @@ docs/
 node_modules/
 dist/
 web-ext-artifacts/
+artifacts/
+.verify-build/
 
 # Visual-companion brainstorm artefacts (superpowers plugin)
 .superpowers/

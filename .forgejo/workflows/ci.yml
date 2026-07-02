@@ -47,3 +47,9 @@ jobs:
 
       - name: Advisory scan
         run: make audit
+
+      # The AMO reviewer rebuilds from the source package and diffs
+      # against the submitted extension. Last step — it repeats npm ci, so it's
+      # the slowest; everything cheaper fails first.
+      - name: Reproducible build
+        run: make verify-build
