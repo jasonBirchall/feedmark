@@ -12,8 +12,8 @@ export type FeedRecord = {
   seenGuids: string[];
   unread: number;
   // "pending": registered, not yet conclusively probed. "feed": fetched OK with ≥1
-  // item — the first such poll baselines every item as seen with unread 0
-  // (THREAT_MODEL.md §4: no badge inflation). "no-feed": fetched OK but 0 items.
+  // item — the first such poll baselines every item as unread (baseline-as-unread,
+  // bounded by the parser's MAX_ITEMS cap). "no-feed": fetched OK but 0 items.
   resolution: FeedResolution;
   etag: string | null;
   lastModified: string | null;

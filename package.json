@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit",
     "build": "rollup -c rollup.config.mjs",
     "run": "web-ext run --source-dir=dist",
-    "test": "echo \"no tests yet\" && exit 0"
+    "test": "node --test --experimental-strip-types $(find src -name '*.test.ts')"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
