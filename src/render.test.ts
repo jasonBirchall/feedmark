@@ -4,6 +4,7 @@ import { renderItems, renderSources } from "./render.ts";
 import { parseFeed } from "./parseFeed.ts";
 import type { ParsedItem } from "./parseFeed.ts";
 import type { FeedView, SubscribeResponse } from "./messages.ts";
+import { MAX_POPUP_ITEMS } from "./config.ts";
 
 // A minimal fake DOM. Its whole job is to prove the render path uses textContent
 // and NEVER innerHTML: the innerHTML setter throws, so any use fails the test.
@@ -15,6 +16,7 @@ class FakeEl {
   disabled = false;
   type = "";
   placeholder = "";
+  className = "";
   #text = "";
   #listeners: Record<string, Array<() => void>> = {};
   constructor(tag: string) {
@@ -74,6 +76,18 @@ test("renders an empty list for no items", () => {
   assert.equal(root.children.length, 0);
 });
 
+// The display cap (iter 8.75): storage holds up to MAX_ITEMS, the popup shows
+// at most MAX_POPUP_ITEMS per source, first-in-stored-order.
+test("renders at most MAX_POPUP_ITEMS item rows", () => {
+  const items = Array.from({ length: MAX_POPUP_ITEMS + 1 }, (_, i) => ({
+    guid: `g${i}`,
+    title: `Item ${i}`,
+  }));
+  const root = render(items);
+  assert.equal(root.children.length, MAX_POPUP_ITEMS);
+  assert.equal(root.children[0]?.textContent, "Item 0");
+});
+
 // THE render-invariant gate (THREAT_MODEL.md §4 / PROJECT.md iter 3): a script
 // payload pushed through parse -> render must come out as inert text.
 test("a <script> payload from a feed title renders as inert text", () => {
@@ -121,10 +135,17 @@ function renderSrc(
   }) as unknown as FakeEl;
 }
 
-test("renders one labelled section per source with its unread count", () => {
+test("renders one labelled section per source: title and count pill", () => {
   const root = renderSrc([view({ title: "Alpha", unread: 2 }), view({ title: "Beta", unread: 0 })]);
-  const headings = root.children.map((section) => section.children[0]?.textContent);
-  assert.deepEqual(headings, ["Alpha (2)", "Beta (0)"]);
+  const headers = root.children.map((section) => section.children[0]);
+  assert.deepEqual(
+    headers.map((h) => h?.children[0]?.textContent),
+    ["Alpha", "Beta"],
+  );
+  assert.deepEqual(
+    headers.map((h) => h?.children[1]?.textContent),
+    ["2", "0"],
+  );
 });
 
 test("a source's items render as text beneath its heading", () => {
@@ -132,34 +153,40 @@ test("a source's items render as text beneath its heading", () => {
     view({ title: "Alpha", unread: 1, items: [{ guid: "a", title: "Story" }] }),
   ]);
   const section = root.children[0];
-  const list = section?.children[1]; // [0] heading, [1] the item list
+  const list = section?.children[1]; // [0] header row, [1] the item list
   assert.deepEqual(
     list?.children.map((li) => li.textContent),
     ["Story"],
   );
 });
 
-// The render-invariant gate extended to bookmark titles: a hostile title (a feed
-// could have planted it, or a synced bookmark) must land as inert text too.
 test("a <script> payload in a source title renders as inert text", () => {
   const payload = `<script>alert(1)</script>`;
   const root = renderSrc([view({ title: payload, unread: 1 })]);
-  const heading = root.children[0]?.children[0];
-  assert.equal(heading?.textContent, `${payload} (1)`);
+  const heading = root.children[0]?.children[0]?.children[0];
+  assert.equal(heading?.textContent, payload);
 });
 
 test("a no-feed source renders a paste field instead of items", () => {
   const root = renderSrc([view({ title: "Simon Willison", state: "no-feed" })]);
   const section = root.children[0];
-  const heading = section?.children[0];
-  assert.equal(heading?.textContent, "Simon Willison"); // no "(0)" count on a no-feed source
-  // The block after the heading holds the paste UI: a label, an input, a button.
+  const header = section?.children[0];
+  assert.equal(header?.children[0]?.textContent, "Simon Willison");
+  assert.equal(header?.children.length, 1); // no count pill on a no-feed source
+  // The block after the header holds the paste UI: a label, an input, a button.
   const block = section?.children[1];
   const tags = block?.children.map((c) => c.tag);
   assert.ok(tags?.includes("input"));
   assert.ok(tags?.includes("button"));
   const button = block?.children.find((c) => c.tag === "button");
   assert.equal(button?.textContent, "Subscribe");
+});
+
+test("the count pill carries the zero marker class only at zero", () => {
+  const root = renderSrc([view({ unread: 3 }), view({ unread: 0 })]);
+  const counts = root.children.map((section) => section.children[0]?.children[1]);
+  assert.equal(counts[0]?.className, "count");
+  assert.equal(counts[1]?.className, "count zero");
 });
 
 test("subscribing with an http url shows the inline https error", async () => {
@@ -188,9 +215,9 @@ test("a source heading links to its site and signals a clear on click", () => {
     [view({ id: "moz", url: "https://blog.mozilla.org/", title: "Mozilla", unread: 3 })],
     (id) => opened.push(id),
   );
-  const link = root.children[0]?.children[0];
+  const link = root.children[0]?.children[0]?.children[0];
   assert.equal(link?.href, "https://blog.mozilla.org/"); // opens the site
-  assert.equal(link?.textContent, "Mozilla (3)");
+  assert.equal(link?.textContent, "Mozilla");
   link?.click();
   assert.deepEqual(opened, ["moz"]); // clears the right source
 });

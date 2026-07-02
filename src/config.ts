@@ -15,3 +15,7 @@ export const MAX_CONCURRENCY = 3; // concurrent feed fetches
 // The watched folder (iter 5): the extension mirrors the bookmarks folder titled
 // this — each child bookmark becomes a feed source.
 export const SOURCE_FOLDER_TITLE = "Feedmark";
+
+// Popup display bound (iter 8.75): item titles shown per source. Display-only —
+// storage still holds up to MAX_ITEMS per feed; nothing is dropped, just not listed.
+export const MAX_POPUP_ITEMS = 10;
