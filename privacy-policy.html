@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Feedmark privacy policy</title>
+    <style>
+      body {
+        max-width: 42rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        font-family: system-ui, sans-serif;
+        line-height: 1.6;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Feedmark privacy policy</h1>
+    <p><em>Effective 2 July 2026.</em></p>
+
+    <p>
+      Feedmark is an RSS reader that runs entirely in your browser. It has no server, no accounts,
+      no analytics, and no way to phone home. This page exists because the extension stores require
+      one — and it's short enough to actually read.
+    </p>
+
+    <h2>What Feedmark stores</h2>
+    <p>Everything Feedmark knows lives in your browser's local extension storage:</p>
+    <ul>
+      <li>the titles and URLs of bookmarks in the one folder you point it at,</li>
+      <li>any feed address you paste in yourself,</li>
+      <li>item titles and identifiers from those feeds, used to count what you haven't read,</li>
+      <li>
+        standard caching headers (ETag, Last-Modified), so feeds aren't re-downloaded needlessly.
+      </li>
+    </ul>
+    <p>
+      Nothing syncs anywhere. Uninstalling the extension deletes all of it. I have no copy — there
+      is nowhere for a copy to go.
+    </p>
+
+    <h2>What Feedmark sends, and to whom</h2>
+    <p>
+      Feedmark fetches the feeds you subscribed to, directly from your browser to the sites that
+      publish them, over https only. Those sites see what they'd see if you visited them yourself:
+      your IP address and the request. That is the complete list of network traffic. There is no
+      other destination — no proxy, no aggregator, no telemetry endpoint, and nothing that reaches
+      me, the developer.
+    </p>
+
+    <h2>What Feedmark doesn't do</h2>
+    <ul>
+      <li>
+        It doesn't read your browsing. There are no content scripts; it never sees the pages you
+        visit, only the specific feed URLs you gave it via a bookmark or a paste.
+      </li>
+      <li>It doesn't touch bookmarks outside the folder you chose, and it never edits any.</li>
+      <li>
+        It doesn't collect analytics, show ads, or share or sell anything — there's nothing to sell.
+      </li>
+    </ul>
+
+    <h2>Changes and contact</h2>
+    <p>
+      If any of the above ever changes, this page and the extension's store listings change with it,
+      and the version history of this page is public in the
+      <a href="https://codeberg.org/jasonbirchall/feedmark">Feedmark repository</a>. Questions or
+      concerns: open an issue there, or email
+      <a href="mailto:json.birchall@gmail.com">json.birchall@gmail.com</a>.
+    </p>
+  </body>
+</html>
