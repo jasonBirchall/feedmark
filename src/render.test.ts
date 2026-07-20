@@ -49,6 +49,12 @@ class FakeDoc {
   }
 }
 
+// Items default to linkless: iteration A only admits `link` into the parsed
+// shape, so nothing renders from it yet. Iteration D is where it becomes an href.
+function item(over: Partial<ParsedItem> = {}): ParsedItem {
+  return { guid: "g", title: "T", link: null, ...over };
+}
+
 function render(items: ParsedItem[]): FakeEl {
   const doc = new FakeDoc();
   return renderItems(items, doc as unknown as Document) as unknown as FakeEl;
@@ -61,10 +67,7 @@ function feedWithTitle(payload: string): ParsedItem[] {
 }
 
 test("renders one row per item, title as text", () => {
-  const root = render([
-    { guid: "a", title: "Alpha" },
-    { guid: "b", title: "Beta" },
-  ]);
+  const root = render([item({ guid: "a", title: "Alpha" }), item({ guid: "b", title: "Beta" })]);
   assert.deepEqual(
     root.children.map((li) => li.textContent),
     ["Alpha", "Beta"],
@@ -79,10 +82,9 @@ test("renders an empty list for no items", () => {
 // The display cap (iter 8.75): storage holds up to MAX_ITEMS, the popup shows
 // at most MAX_POPUP_ITEMS per source, first-in-stored-order.
 test("renders at most MAX_POPUP_ITEMS item rows", () => {
-  const items = Array.from({ length: MAX_POPUP_ITEMS + 1 }, (_, i) => ({
-    guid: `g${i}`,
-    title: `Item ${i}`,
-  }));
+  const items = Array.from({ length: MAX_POPUP_ITEMS + 1 }, (_, i) =>
+    item({ guid: `g${i}`, title: `Item ${i}` }),
+  );
   const root = render(items);
   assert.equal(root.children.length, MAX_POPUP_ITEMS);
   assert.equal(root.children[0]?.textContent, "Item 0");
@@ -150,7 +152,7 @@ test("renders one labelled section per source: title and count pill", () => {
 
 test("a source's items render as text beneath its heading", () => {
   const root = renderSrc([
-    view({ title: "Alpha", unread: 1, items: [{ guid: "a", title: "Story" }] }),
+    view({ title: "Alpha", unread: 1, items: [item({ guid: "a", title: "Story" })] }),
   ]);
   const section = root.children[0];
   const list = section?.children[1]; // [0] header row, [1] the item list
@@ -196,7 +198,7 @@ test("the count pill carries the zero marker class only at zero", () => {
 // targets. count/zero are already pinned by the zero-marker test above.
 test("render emits the class hooks popup.css styles", () => {
   const root = renderSrc([
-    view({ title: "A", unread: 1, items: [{ guid: "g", title: "T" }] }),
+    view({ title: "A", unread: 1, items: [item({ guid: "g", title: "T" })] }),
     view({ id: "n", title: "B", state: "no-feed" }),
   ]);
   const fed = root.children[0];

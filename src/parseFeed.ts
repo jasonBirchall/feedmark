@@ -1,7 +1,7 @@
 import { XMLParser } from "fast-xml-parser";
 import { MAX_ITEMS } from "./config.ts";
 
-export type ParsedItem = { guid: string; title: string };
+export type ParsedItem = { guid: string; title: string; link: string | null };
 
 // processEntities:false disables custom/DOCTYPE entity expansion, closing the
 // billion-laughs vector. fast-xml-parser does not resolve external entities.
@@ -34,6 +34,28 @@ function hrefOf(value: unknown): string {
   return textOf(first);
 }
 
+// A feed item's link is attacker-controlled text that will later be rendered as
+// an href on an extension page. It is admitted only as a parsed `https:` URL, or
+// not at all (THREAT_MODEL.md §4) — the same fail-closed shape as the bookmark
+// gate in source.ts. The difference: there, fetchFeed re-checks as defence in
+// depth; here the renderer deliberately does NOT re-validate, consuming `link`
+// as https-or-null by construction. This is therefore the only checkpoint, so it
+// has to be total. Rejected by construction: `javascript:`, `data:`, `vbscript:`
+// and every other scheme; `http:` (no silent downgrade); protocol-relative
+// `//host/x`, which has no scheme to parse and so never survives the URL
+// constructor; and anything malformed or absent.
+function linkOf(raw: string): string | null {
+  if (!raw) return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return null; // malformed, or relative — no base is supplied, deliberately
+  }
+  // The canonical serialisation of what was actually validated, not the raw text.
+  return parsed.protocol === "https:" ? parsed.href : null;
+}
+
 // Identity chain, most-to-least stable. The title fallback keeps an item that
 // carries neither guid nor link from being silently dropped (THREAT_MODEL.md §4 /
 // iter-8 AC1: "don't lose items"). It's a deliberate trade: the title is stable
@@ -46,6 +68,34 @@ function rssGuid(item: Record<string, unknown>): string {
 
 function atomGuid(entry: Record<string, unknown>): string {
   return textOf(entry["id"]) || hrefOf(entry["link"]) || textOf(entry["title"]);
+}
+
+// The article's own URL, gated. Kept separate from the identity chain above:
+// `guid` wants *any* stable string, `link` wants a URL safe to navigate to, so a
+// rejected link must never disturb the guid an item is already known by.
+function rssLink(item: Record<string, unknown>): string | null {
+  return linkOf(textOf(item["link"]));
+}
+
+function atomLink(entry: Record<string, unknown>): string | null {
+  return linkOf(alternateHrefOf(entry["link"]));
+}
+
+// Atom entries carry several <link>s distinguished by rel. Only rel="alternate"
+// — or an absent rel, which RFC 4287 defines as alternate — is the article; a
+// "self", "edit", "replies" or "enclosure" href is feed plumbing and not
+// somewhere to send a reader. hrefOf's take-the-first rule is right for identity
+// (any stable href will do) and wrong here, which is why the two stay separate.
+// A <link> with no href attribute yields nothing: no href, no link.
+function alternateHrefOf(value: unknown): string {
+  for (const node of toArray(value)) {
+    if (!node || typeof node !== "object") continue;
+    const record = node as Record<string, unknown>;
+    if (!("@_href" in record)) continue;
+    const rel = textOf(record["@_rel"]);
+    if (rel === "" || rel === "alternate") return textOf(record["@_href"]);
+  }
+  return "";
 }
 
 export function parseFeed(xml: string): ParsedItem[] {
@@ -62,6 +112,7 @@ export function parseFeed(xml: string): ParsedItem[] {
 
   const raw = channel ? toArray(channel["item"]) : toArray(feed?.["entry"]);
   const pickGuid = channel ? rssGuid : atomGuid;
+  const pickLink = channel ? rssLink : atomLink;
 
   const items: ParsedItem[] = [];
   for (const node of raw) {
@@ -69,7 +120,8 @@ export function parseFeed(xml: string): ParsedItem[] {
     if (!node || typeof node !== "object") continue;
     const record = node as Record<string, unknown>;
     const guid = pickGuid(record);
-    if (guid) items.push({ guid, title: textOf(record["title"]) });
+    // A rejected link never costs us the item — only its link (AC A2).
+    if (guid) items.push({ guid, title: textOf(record["title"]), link: pickLink(record) });
   }
   return items;
 }

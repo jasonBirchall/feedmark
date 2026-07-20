@@ -14,6 +14,27 @@ const ATOM = `<?xml version="1.0"?>
   <entry><title>B</title><link href="https://x.test/b"/></entry>
 </feed>`;
 
+// Atom's <link> is an element with attributes, and an entry commonly carries
+// several with different rels. Only rel="alternate" — or an absent rel, which
+// the spec defaults to alternate — is the article itself; "edit", "self" and
+// "replies" are feed plumbing, not somewhere to send the reader.
+const ATOM_MULTI_LINK = `<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry><title>A</title><id>atom-a</id>
+    <link rel="edit" href="https://x.test/edit/a"/>
+    <link rel="alternate" href="https://x.test/a"/>
+    <link rel="replies" href="https://x.test/replies/a"/>
+  </entry>
+</feed>`;
+
+// Every link is plumbing — there is no article link to offer.
+const ATOM_NO_ALTERNATE = `<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry><title>A</title><id>atom-a</id>
+    <link rel="self" href="https://x.test/self/a"/>
+  </entry>
+</feed>`;
+
 const RSS_NO_GUID = `<?xml version="1.0"?>
 <rss version="2.0"><channel>
   <item><title>A</title><link>https://x.test/a</link></item>
@@ -85,6 +106,34 @@ test("title is empty string when absent", () => {
   );
 });
 
+test("carries the article's own https link from an RSS <link>", () => {
+  assert.deepEqual(
+    parseFeed(RSS).map((i) => i.link),
+    ["https://x.test/a", "https://x.test/b"],
+  );
+});
+
+test("carries the article's own https link from an Atom <link href>", () => {
+  assert.deepEqual(
+    parseFeed(ATOM).map((i) => i.link),
+    [null, "https://x.test/b"],
+  );
+});
+
+test("prefers the Atom rel=alternate link over other rels", () => {
+  assert.deepEqual(
+    parseFeed(ATOM_MULTI_LINK).map((i) => i.link),
+    ["https://x.test/a"],
+  );
+});
+
+test("has no link when an Atom entry offers no alternate", () => {
+  assert.deepEqual(
+    parseFeed(ATOM_NO_ALTERNATE).map((i) => i.link),
+    [null],
+  );
+});
+
 test("falls back to link when guid is missing", () => {
   assert.deepEqual(
     parseFeed(RSS_NO_GUID).map((i) => i.guid),
@@ -93,15 +142,80 @@ test("falls back to link when guid is missing", () => {
 });
 
 test("keeps an RSS item with only a title, using the title as identity", () => {
-  assert.deepEqual(parseFeed(RSS_TITLE_ONLY), [{ guid: "Only a title", title: "Only a title" }]);
+  assert.deepEqual(parseFeed(RSS_TITLE_ONLY), [
+    { guid: "Only a title", title: "Only a title", link: null },
+  ]);
 });
 
 test("keeps an Atom entry with only a title, using the title as identity", () => {
-  assert.deepEqual(parseFeed(ATOM_TITLE_ONLY), [{ guid: "Only a title", title: "Only a title" }]);
+  assert.deepEqual(parseFeed(ATOM_TITLE_ONLY), [
+    { guid: "Only a title", title: "Only a title", link: null },
+  ]);
 });
 
 test("drops an item with no guid, link, or title (nothing to identify it by)", () => {
   assert.deepEqual(parseFeed(RSS_ANONYMOUS), []);
+});
+
+// The gate is the only checkpoint on the path from feed text to an href on an
+// extension page — the renderer will not re-validate (THREAT_MODEL.md §4). Each
+// payload is a way of arriving at a non-https scheme: outright script schemes,
+// case variation, whitespace and newline obfuscation (the URL parser strips both
+// before deciding the scheme, so neither smuggles anything past it), a silent
+// downgrade to http, and protocol-relative or bare-relative forms that have no
+// scheme at all. All must land on null, and none may cost us the item.
+const HOSTILE_LINKS = [
+  "javascript:alert(1)",
+  "JavaScript:alert(1)",
+  "  javascript:alert(1)  ",
+  "java\nscript:alert(1)",
+  "data:text/html,<script>alert(1)</script>",
+  "vbscript:msgbox(1)",
+  "http://x.test/a",
+  "//evil.test/x",
+  "/relative/path",
+  "not a url at all",
+];
+
+for (const payload of HOSTILE_LINKS) {
+  test(`refuses a non-https item link: ${JSON.stringify(payload)}`, () => {
+    const xml = `<?xml version="1.0"?><rss version="2.0"><channel>
+      <item><title>A</title><guid>guid-a</guid><link>${payload}</link></item>
+    </channel></rss>`;
+    assert.deepEqual(parseFeed(xml), [{ guid: "guid-a", title: "A", link: null }]);
+  });
+
+  test(`refuses the same payload in an Atom href: ${JSON.stringify(payload)}`, () => {
+    const xml = `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">
+      <entry><title>A</title><id>atom-a</id><link href="${payload}"/></entry>
+    </feed>`;
+    assert.deepEqual(parseFeed(xml), [{ guid: "atom-a", title: "A", link: null }]);
+  });
+}
+
+test("an item with a rejected link is kept, not dropped", () => {
+  const xml = `<?xml version="1.0"?><rss version="2.0"><channel>
+    <item><title>Good</title><guid>g1</guid><link>https://x.test/good</link></item>
+    <item><title>Hostile</title><guid>g2</guid><link>javascript:alert(1)</link></item>
+    <item><title>Linkless</title><guid>g3</guid></item>
+  </channel></rss>`;
+  assert.deepEqual(parseFeed(xml), [
+    { guid: "g1", title: "Good", link: "https://x.test/good" },
+    { guid: "g2", title: "Hostile", link: null },
+    { guid: "g3", title: "Linkless", link: null },
+  ]);
+});
+
+// Scheme is the gate; host is not. An article link may legitimately point at any
+// https host, unlike the *fetch* path, whose origin is pinned at registration.
+test("admits an https link to any host, and normalises it", () => {
+  const xml = `<?xml version="1.0"?><rss version="2.0"><channel>
+    <item><guid>g1</guid><link>HTTPS://Other.test/a</link></item>
+  </channel></rss>`;
+  assert.deepEqual(
+    parseFeed(xml).map((i) => i.link),
+    ["https://other.test/a"],
+  );
 });
 
 test("returns [] on malformed xml without throwing", () => {

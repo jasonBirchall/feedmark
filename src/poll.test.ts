@@ -3,6 +3,13 @@ import assert from "node:assert/strict";
 import { pollFeed, pollAll, type PollLogger } from "./poll.ts";
 import { MAX_ITEMS, MAX_SEEN_GUIDS } from "./config.ts";
 import type { FeedRecord } from "./storage.ts";
+import type { ParsedItem } from "./parseFeed.ts";
+
+// Stored items default to linkless: poll's concern is identity and counting, and
+// the link gate has its own tests in parseFeed.test.ts.
+function item(over: Partial<ParsedItem> = {}): ParsedItem {
+  return { guid: "g", title: "T", link: null, ...over };
+}
 
 // A logger that records what autodiscovery narrated, so tests assert on the reason.
 function capture(): { logger: PollLogger; logs: { level: string; msg: string }[] } {
@@ -149,18 +156,18 @@ test("a successful poll persists the parsed items for rendering", async () => {
   });
   assert.ok(out);
   assert.deepEqual(out.items, [
-    { guid: "a", title: "Alpha" },
-    { guid: "b", title: "Beta" },
+    item({ guid: "a", title: "Alpha" }),
+    item({ guid: "b", title: "Beta" }),
   ]);
 });
 
 test("each poll replaces the stored items with the latest parse", async () => {
   const out = await pollFeed(
-    record({ items: [{ guid: "old", title: "Old" }], seenGuids: ["old"], unread: 1 }),
+    record({ items: [item({ guid: "old", title: "Old" })], seenGuids: ["old"], unread: 1 }),
     { fetchImpl: okFetch(rssWithTitles([{ guid: "new", title: "New" }])) },
   );
   assert.ok(out);
-  assert.deepEqual(out.items, [{ guid: "new", title: "New" }]);
+  assert.deepEqual(out.items, [item({ guid: "new", title: "New" })]);
 });
 
 test("a failed fetch leaves state untouched (null, last-good preserved)", async () => {
@@ -408,7 +415,7 @@ test("a feed failing mid-batch yields no update, so its last-good is never wiped
     url: "https://healthy.test/feed",
     origin: "https://healthy.test",
     seenGuids: ["h1"],
-    items: [{ guid: "h1", title: "Healthy old" }],
+    items: [item({ guid: "h1", title: "Healthy old" })],
     unread: 0,
   });
   const broken = record({
@@ -416,7 +423,7 @@ test("a feed failing mid-batch yields no update, so its last-good is never wiped
     url: "https://broken.test/feed",
     origin: "https://broken.test",
     seenGuids: ["b1"],
-    items: [{ guid: "b1", title: "Broken last-good" }],
+    items: [item({ guid: "b1", title: "Broken last-good" })],
     unread: 2,
   });
   const updates = await pollAll([broken, healthy], {
