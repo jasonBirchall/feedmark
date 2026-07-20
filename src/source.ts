@@ -31,7 +31,7 @@ export function feedFromBookmark(bm: BookmarkNode): FeedRecord | null {
     feedUrl: null, // no manual override yet; poll the bookmark URL itself
     origin: parsed.origin,
     seenGuids: [],
-    unread: 0,
+    readGuids: [],
     resolution: "pending", // first poll decides feed vs no-feed
     etag: null,
     lastModified: null,

@@ -12,10 +12,12 @@ import type { ParsedItem } from "./parseFeed.ts";
 export type PollLogger = Pick<typeof console, "info" | "warn">;
 
 // First successful feed poll baselines: every current item is tracked in the dedup
-// history AND shown as unread (baseline-as-unread, iter 8.5 — THREAT_MODEL.md §4,
-// reversing the earlier baseline-all-seen). unread = items.length is itself bounded
-// by the parser's MAX_ITEMS cap, so a registration can't inflate past it. Shared by
-// the poll loop, subscribe, and autodiscover.
+// history AND shows as unread (baseline-as-unread, iter 8.5 — THREAT_MODEL.md §4,
+// reversing the earlier baseline-all-seen). Since iter B unread is derived, not
+// set: a fresh feed's items count as unread because readGuids is empty, and the
+// derivation is bounded by the parser's MAX_ITEMS cap on items[], so a
+// registration can't inflate past it. Shared by the poll loop, subscribe, and
+// autodiscover.
 export function baseline(
   record: FeedRecord,
   items: ParsedItem[],
@@ -26,7 +28,6 @@ export function baseline(
     ...record,
     resolution: "feed",
     seenGuids: items.map((item) => item.guid).slice(0, MAX_SEEN_GUIDS),
-    unread: items.length,
     etag,
     lastModified,
     items,
@@ -58,6 +59,10 @@ export async function pollFeed(
     return baseline(record, items, result.etag, result.lastModified);
   }
 
+  // Track genuinely-new guids in the dedup history. Unread is not computed
+  // here: it derives from items[] minus readGuids (readState.ts), so a
+  // re-fetched item whose guid is in readGuids stays read, however the feed
+  // re-serves or reorders it. readGuids rides along untouched via the spread.
   const seen = new Set(record.seenGuids);
   const fresh: string[] = [];
   for (const item of items) {
@@ -69,7 +74,6 @@ export async function pollFeed(
 
   return {
     ...record,
-    unread: record.unread + fresh.length,
     seenGuids: [...fresh, ...record.seenGuids].slice(0, MAX_SEEN_GUIDS),
     etag: result.etag,
     lastModified: result.lastModified,

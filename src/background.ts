@@ -7,6 +7,7 @@ import { feedsFromFolder, reconcile } from "./source.ts";
 import { pollAll } from "./poll.ts";
 import { resolveSubscription } from "./subscribe.ts";
 import { totalUnread, badgeText } from "./badge.ts";
+import { unreadCount } from "./readState.ts";
 import type { FeedRecord } from "./storage.ts";
 import type { GetItemsResponse, SubscribeResponse } from "./messages.ts";
 
@@ -59,7 +60,7 @@ async function handleSubscribe(id: string, feedUrl: string): Promise<SubscribeRe
       id: r.id,
       url: r.url,
       title: r.title,
-      unread: r.unread,
+      unread: unreadCount(r),
       items: r.items,
       state: "feed",
     },
@@ -87,7 +88,7 @@ browser.runtime.onMessage.addListener(
           id: f.id,
           url: f.url,
           title: f.title,
-          unread: f.unread,
+          unread: unreadCount(f), // derived per iter B; FeedView's shape is unchanged
           items: f.items,
           state: f.resolution,
         })),

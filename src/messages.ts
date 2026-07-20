@@ -9,7 +9,9 @@ export type GetItemsRequest = { type: "getItems" };
 
 // One source as the popup sees it: the bookmark's id (to clear the right feed),
 // its site url (to open on click), title, unread count, and latest items.
-// Replaces the flat item list of iter 3/4 with per-source groups.
+// Replaces the flat item list of iter 3/4 with per-source groups. Since iter B
+// `unread` is computed by the background from derived state (readState.ts);
+// the popup-facing shape is unchanged.
 export type FeedView = {
   id: string;
   url: string;

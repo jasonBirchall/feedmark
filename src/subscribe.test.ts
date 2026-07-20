@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { resolveSubscription } from "./subscribe.ts";
+import { unreadCount } from "./readState.ts";
 import type { FeedRecord } from "./storage.ts";
 
 function record(over: Partial<FeedRecord> = {}): FeedRecord {
@@ -11,7 +12,7 @@ function record(over: Partial<FeedRecord> = {}): FeedRecord {
     feedUrl: null,
     origin: "https://site.test",
     seenGuids: [],
-    unread: 0,
+    readGuids: [],
     resolution: "no-feed",
     etag: null,
     lastModified: null,
@@ -67,7 +68,7 @@ test("a valid feed paste subscribes: feedUrl set, origin re-pinned, current item
   assert.equal(out.record.feedUrl, "https://feeds.example/atom.xml");
   assert.equal(out.record.origin, "https://feeds.example"); // re-pinned to the pasted feed
   assert.equal(out.record.resolution, "feed");
-  assert.equal(out.record.unread, 2); // its current items show as unread on subscribe
+  assert.equal(unreadCount(out.record), 2); // its current items derive as unread on subscribe
   assert.deepEqual(out.record.seenGuids, ["a", "b"]);
   assert.equal(out.record.url, "https://site.test/"); // click-through unchanged
 });

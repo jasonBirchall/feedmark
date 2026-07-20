@@ -10,6 +10,7 @@ export const MAX_BODY_BYTES = 5 * 1024 * 1024; // 5 MB
 export const FETCH_TIMEOUT_MS = 30_000; // 30 s
 export const MAX_ITEMS = 200; // items parsed per feed
 export const MAX_SEEN_GUIDS = 200; // bounded seen-GUID history per feed
+export const MAX_READ_GUIDS = 200; // bounded read-GUID history per feed (iter B; mirrors MAX_SEEN_GUIDS)
 export const MAX_CONCURRENCY = 3; // concurrent feed fetches
 
 // The watched folder (iter 5): the extension mirrors the bookmarks folder titled

@@ -11,7 +11,7 @@ function feed(over: Partial<FeedRecord> = {}): FeedRecord {
     feedUrl: null,
     origin: "https://a.test",
     seenGuids: [],
-    unread: 0,
+    readGuids: [],
     resolution: "pending",
     etag: null,
     lastModified: null,
@@ -33,7 +33,7 @@ test("an https bookmark becomes a fresh feed record", () => {
   assert.equal(rec?.feedUrl, null);
   assert.equal(rec?.resolution, "pending");
   assert.deepEqual(rec?.seenGuids, []);
-  assert.equal(rec?.unread, 0);
+  assert.deepEqual(rec?.readGuids, []); // nothing read → everything derives unread
   assert.deepEqual(rec?.items, []);
   assert.equal(rec?.etag, null);
   assert.equal(rec?.lastModified, null);
@@ -104,7 +104,7 @@ test("an empty folder yields no feeds", () => {
 });
 
 test("reconcile adds a newly-scanned bookmark as a fresh feed", () => {
-  const current = [feed({ id: "a", resolution: "feed", unread: 2 })];
+  const current = [feed({ id: "a", resolution: "feed", readGuids: ["x"] })];
   const scanned = [
     feed({ id: "a", resolution: "pending" }),
     feed({ id: "b", title: "B", url: "https://b.test/feed", origin: "https://b.test" }),
@@ -114,7 +114,7 @@ test("reconcile adds a newly-scanned bookmark as a fresh feed", () => {
     next.map((f) => f.id),
     ["a", "b"],
   );
-  assert.equal(next.find((f) => f.id === "a")?.unread, 2); // existing state kept
+  assert.deepEqual(next.find((f) => f.id === "a")?.readGuids, ["x"]); // existing state kept
   assert.equal(next.find((f) => f.id === "b")?.resolution, "pending"); // new feed baselines on first poll
 });
 
@@ -129,12 +129,12 @@ test("reconcile drops a bookmark no longer in the scan", () => {
 
 test("reconcile keeps state but adopts the new title on rename", () => {
   const current = [
-    feed({ id: "a", title: "Old", unread: 5, resolution: "feed", seenGuids: ["x"] }),
+    feed({ id: "a", title: "Old", readGuids: ["r"], resolution: "feed", seenGuids: ["x"] }),
   ];
   const scanned = [feed({ id: "a", title: "New" })]; // same url
   const a = reconcile(current, scanned)[0];
   assert.equal(a?.title, "New");
-  assert.equal(a?.unread, 5);
+  assert.deepEqual(a?.readGuids, ["r"]);
   assert.equal(a?.resolution, "feed");
   assert.deepEqual(a?.seenGuids, ["x"]);
 });
@@ -152,12 +152,18 @@ test("fetchTarget fetches the pasted feed url when present", () => {
 
 test("reconcile re-baselines a bookmark whose url changed", () => {
   const current = [
-    feed({ id: "a", url: "https://a.test/feed", unread: 5, resolution: "feed", seenGuids: ["x"] }),
+    feed({
+      id: "a",
+      url: "https://a.test/feed",
+      readGuids: ["r"],
+      resolution: "feed",
+      seenGuids: ["x"],
+    }),
   ];
   const scanned = [feed({ id: "a", url: "https://a.test/rss" })]; // fresh, different url
   const a = reconcile(current, scanned)[0];
   assert.equal(a?.url, "https://a.test/rss");
   assert.equal(a?.resolution, "pending"); // different feed → no inflation from stale GUIDs
-  assert.equal(a?.unread, 0);
+  assert.deepEqual(a?.readGuids, []);
   assert.deepEqual(a?.seenGuids, []);
 });
