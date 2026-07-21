@@ -69,7 +69,8 @@ git push origin v0.2.0                  # triggers the AMO publish
 The tag must match the manifest version exactly — the release job refuses
 anything else — and the job re-proves the reproducible build before uploading
 to AMO with the source package attached. The Chrome Web Store is manual for
-now: `make build`, zip `dist/`, upload through the developer dashboard.
+now: `make chrome-package`, then upload the zip it drops in `artifacts/`
+through the developer dashboard.
 
 ## License
 

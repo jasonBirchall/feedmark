@@ -2,7 +2,7 @@
 # they ever run in CI. Each target does exactly what it says.
 
 .DEFAULT_GOAL := help
-.PHONY: help install lint lint-ext audit format typecheck test build run clean icons source-package verify-build
+.PHONY: help install lint lint-ext audit format typecheck test build run clean icons source-package chrome-package verify-build
 
 VERSION := $(shell node -p "require('./manifest.json').version")
 
@@ -54,6 +54,13 @@ clean: ## Remove build output
 source-package: ## Zip the tracked source + build instructions for AMO review
 	mkdir -p artifacts
 	git archive --format=zip -o artifacts/feedmark-$(VERSION)-source.zip HEAD
+
+# The Chrome Web Store has no automated publish path here (AMO does, via the
+# release workflow): this packs dist/ into the zip its developer dashboard
+# wants. web-ext does the zipping, so no zip binary is needed.
+chrome-package: build ## Zip dist/ for the Chrome Web Store dashboard upload
+	npx web-ext build --source-dir=dist --artifacts-dir=artifacts \
+		--filename=feedmark-$(VERSION)-chrome.zip --overwrite-dest
 
 # The AMO admin reviewer rebuilds from the source package and diffs against the
 # submitted extension expecting NO differences (iter-9 gate). This target is that
