@@ -1,5 +1,5 @@
 import browser from "webextension-polyfill";
-import { markItemRead as markRead, normalizeRecord } from "./readState.ts";
+import { markAllRead, markItemRead as markRead, normalizeRecord } from "./readState.ts";
 import type { StoredFeedRecord } from "./readState.ts";
 import type { ParsedItem } from "./parseFeed.ts";
 
@@ -64,5 +64,15 @@ export async function markItemRead(id: string, guid: string): Promise<void> {
   const record = map[id];
   if (!record) return;
   map[id] = markRead(record, guid);
+  await browser.storage.local.set({ [KEY]: map });
+}
+
+// Mark a whole source read (iter D.1) — its derived count falls to zero at
+// once. Same shape and discipline as markItemRead above.
+export async function markSourceRead(id: string): Promise<void> {
+  const map = await readMap();
+  const record = map[id];
+  if (!record) return;
+  map[id] = markAllRead(record);
   await browser.storage.local.set({ [KEY]: map });
 }

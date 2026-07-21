@@ -30,6 +30,12 @@ export type GetItemsResponse = { sources: FeedView[] };
 // click-through (customer decision, iters C/D).
 export type MarkItemReadRequest = { type: "markItemRead"; id: string; guid: string };
 
+// Fire-and-forget: mark a whole source read (iter D.1). Not the retired
+// clearUnread returning by the back door: that was a side effect of opening the
+// site; this is an explicit action row under the expanded fold. It exists
+// because per-item read cannot dismiss a LINKED item without opening it.
+export type MarkSourceReadRequest = { type: "markSourceRead"; id: string };
+
 // Subscribe a no-feed source by pasting an https feed URL. The popup messages the
 // background (the only fetcher); the background replies with the resolved source or
 // a typed reason the popup renders inline.

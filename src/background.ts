@@ -2,7 +2,7 @@
 // All poll state lives in storage.local; nothing is held in memory across wakes.
 import browser from "webextension-polyfill";
 import { ALARM_NAME, ALARM_PERIOD_MINUTES, SOURCE_FOLDER_TITLE } from "./config.ts";
-import { loadFeeds, saveFeed, saveFeeds, markItemRead } from "./storage.ts";
+import { loadFeeds, saveFeed, saveFeeds, markItemRead, markSourceRead } from "./storage.ts";
 import { feedsFromFolder, reconcile } from "./source.ts";
 import { pollAll } from "./poll.ts";
 import { resolveSubscription } from "./subscribe.ts";
@@ -112,6 +112,10 @@ browser.runtime.onMessage.addListener(
       typeof msg.guid === "string"
     ) {
       void markItemRead(msg.id, msg.guid).then(refreshBadge);
+    }
+    // The wholesale per-source read (iter D.1): same persistence + badge path.
+    if (msg?.type === "markSourceRead" && typeof msg.id === "string") {
+      void markSourceRead(msg.id).then(refreshBadge);
     }
     return undefined; // not ours, or fire-and-forget with no reply
   },

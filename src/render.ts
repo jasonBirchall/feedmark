@@ -66,6 +66,7 @@ export function renderSources(
   handlers: {
     onSubscribe: (id: string, feedUrl: string) => Promise<SubscribeResponse>;
     onItemRead: (id: string, guid: string) => void;
+    onMarkAllRead: (id: string) => void;
   },
 ): HTMLElement {
   const root = doc.createElement("div");
@@ -97,25 +98,47 @@ export function renderSources(
     // renders purely from the background's derived state.
     const readLocal = new Set<string>();
     let unread = source.unread;
-    const onRead = (guid: string): void => {
-      if (readLocal.has(guid)) return; // e.g. a ctrl-clicked anchor clicked again
-      readLocal.add(guid);
-      handlers.onItemRead(source.id, guid);
-      unread -= 1;
+    let body: HTMLElement | null = null;
+
+    const setPill = (): void => {
       if (count) {
         count.textContent = String(unread);
         count.className = unread === 0 ? "count zero" : "count";
       }
     };
 
-    let body: HTMLElement | null = null;
+    const onRead = (guid: string): void => {
+      if (readLocal.has(guid)) return; // e.g. a ctrl-clicked anchor clicked again
+      readLocal.add(guid);
+      handlers.onItemRead(source.id, guid);
+      unread -= 1;
+      setPill();
+    };
+
+    // The wholesale read (iter D.1). source.items IS the full unread backlog
+    // (the background sends it unwindowed), so adding every guid to readLocal
+    // and zeroing the pill matches exactly what the background persists. The
+    // body is rebuilt through the normal path, so the open fold swaps to the
+    // "Nothing unread." line instead of collapsing under the click.
+    const onAllRead = (): void => {
+      for (const item of source.items) readLocal.add(item.guid);
+      handlers.onMarkAllRead(source.id);
+      unread = 0;
+      setPill();
+      if (body) {
+        section.removeChild(body);
+        body = renderBody(source, readLocal, doc, handlers.onSubscribe, onRead, onAllRead);
+        section.appendChild(body);
+      }
+    };
+
     header.addEventListener("click", () => {
       if (body) {
         section.removeChild(body);
         body = null;
         return;
       }
-      body = renderBody(source, readLocal, doc, handlers.onSubscribe, onRead);
+      body = renderBody(source, readLocal, doc, handlers.onSubscribe, onRead, onAllRead);
       section.appendChild(body);
     });
 
@@ -135,6 +158,7 @@ function renderBody(
   doc: Document,
   onSubscribe: (id: string, feedUrl: string) => Promise<SubscribeResponse>,
   onRead: (guid: string) => void,
+  onAllRead: () => void,
 ): HTMLElement {
   if (source.state !== "feed") return renderNoFeed(source, doc, onSubscribe);
   const items = source.items.filter((item) => !readLocal.has(item.guid));
@@ -146,7 +170,21 @@ function renderBody(
     empty.textContent = "Nothing unread.";
     return empty;
   }
-  return renderItems(items, doc, onRead);
+  const list = renderItems(items, doc, onRead);
+  // The wholesale action rides as the list's last row (iter D.1): it marks the
+  // ENTIRE stored backlog read, not just the windowed ten — the honest reading
+  // of its copy. It exists because a linked item row navigates: without this,
+  // the only way to dismiss an article you don't want is to open it. The copy
+  // is extension-authored, never feed text.
+  const row = doc.createElement("li");
+  row.className = "mark-all-row";
+  const button = doc.createElement("button");
+  button.className = "mark-all";
+  button.textContent = "Mark all read";
+  button.addEventListener("click", onAllRead);
+  row.appendChild(button);
+  list.appendChild(row);
+  return list;
 }
 
 // The "no feed here" state: a clear label and a paste field. On Subscribe the button

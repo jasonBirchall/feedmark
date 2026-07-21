@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   unreadItems,
   unreadCount,
+  markAllRead,
   markItemRead,
   normalizeRecord,
   type StoredFeedRecord,
@@ -64,10 +65,10 @@ test("a read guid with no stored item contributes nothing (eviction semantics)",
   assert.equal(unreadCount(rec), 1);
 });
 
-// Iter D: the wholesale markAllRead died with the source-level clear (customer
-// decision); per-item read is the whole model, and it must uphold the same
-// invariants the clear did — idempotence, prior history kept, the cap shedding
-// only old history.
+// Iter D: per-item read is the primary model, and it must uphold the same
+// invariants the old source-level clear did — idempotence, prior history kept,
+// the cap shedding only old history. (The wholesale verb returned in D.1 as an
+// explicit affordance, tested below.)
 
 test("markItemRead marks exactly one item read; the derived count drops by one", () => {
   const rec = record({
@@ -113,6 +114,43 @@ test("read state survives a re-poll that re-serves or reorders the item (D3 inhe
     unreadItems(repolled).map((i) => i.guid),
     ["new", "b"], // "a" stays read; nothing re-counts
   );
+});
+
+// Iter D.1: the wholesale read is back as an explicit affordance (it left with
+// the header click-through) — same invariants as when it was clearUnread's
+// internals in iter B.
+
+test("markAllRead marks every current item read and keeps prior history", () => {
+  const rec = record({
+    items: [item({ guid: "a" }), item({ guid: "b" })],
+    readGuids: ["older"],
+  });
+  const out = markAllRead(rec);
+  assert.deepEqual(out.readGuids, ["a", "b", "older"]); // current first, history kept
+  assert.equal(unreadCount(out), 0);
+});
+
+test("markAllRead is idempotent (no duplicate guids)", () => {
+  const once = markAllRead(record({ items: [item({ guid: "a" })] }));
+  const twice = markAllRead(once);
+  assert.deepEqual(twice.readGuids, ["a"]);
+});
+
+test("markAllRead at the cap keeps current items read and sheds oldest history", () => {
+  const history = Array.from({ length: MAX_READ_GUIDS }, (_, n) => `old${n}`);
+  const out = markAllRead(
+    record({ items: [item({ guid: "a" }), item({ guid: "b" })], readGuids: history }),
+  );
+  assert.equal(out.readGuids.length, MAX_READ_GUIDS);
+  assert.deepEqual(out.readGuids.slice(0, 2), ["a", "b"]);
+  assert.equal(unreadCount(out), 0); // every stored item still reads as read
+});
+
+test("markAllRead composes with per-item reads (a mixed session stays coherent)", () => {
+  const rec = record({ items: [item({ guid: "a" }), item({ guid: "b" }), item({ guid: "c" })] });
+  const mixed = markAllRead(markItemRead(rec, "b"));
+  assert.equal(unreadCount(mixed), 0);
+  assert.equal(new Set(mixed.readGuids).size, mixed.readGuids.length); // no duplicates
 });
 
 // B4: old-shape records load without error and behave sanely.

@@ -4,6 +4,7 @@ import type {
   GetItemsRequest,
   GetItemsResponse,
   MarkItemReadRequest,
+  MarkSourceReadRequest,
   SubscribeRequest,
   SubscribeResponse,
 } from "./messages.ts";
@@ -39,6 +40,11 @@ async function renderApp(root: HTMLElement): Promise<void> {
       // handled inside renderSources, no reply needed.
       onItemRead: (id, guid) => {
         const req: MarkItemReadRequest = { type: "markItemRead", id, guid };
+        void browser.runtime.sendMessage(req);
+      },
+      // Same fire-and-forget shape for the wholesale read (iter D.1).
+      onMarkAllRead: (id) => {
+        const req: MarkSourceReadRequest = { type: "markSourceRead", id };
         void browser.runtime.sendMessage(req);
       },
     }),

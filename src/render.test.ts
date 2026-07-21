@@ -136,12 +136,14 @@ function renderSrc(
   handlers: {
     onSubscribe?: (id: string, feedUrl: string) => Promise<SubscribeResponse>;
     onItemRead?: (id: string, guid: string) => void;
+    onMarkAllRead?: (id: string) => void;
   } = {},
 ): FakeEl {
   const doc = new FakeDoc();
   return renderSources(sources, doc as unknown as Document, {
     onSubscribe: handlers.onSubscribe ?? (async () => ({ ok: false, reason: "no-feed" })),
     onItemRead: handlers.onItemRead ?? (() => {}),
+    onMarkAllRead: handlers.onMarkAllRead ?? (() => {}),
   }) as unknown as FakeEl;
 }
 
@@ -169,7 +171,8 @@ test("clicking a header toggles the source's items open and closed", () => {
   header?.click(); // open
   assert.equal(section?.children.length, 2);
   const list = section?.children[1];
-  assert.deepEqual(list?.children.map(rowText), ["Story"]);
+  // Item rows first, the mark-all action row last (iter D.1).
+  assert.deepEqual(list?.children.map(rowText), ["Story", "Mark all read"]);
 
   header?.click(); // close
   assert.equal(section?.children.length, 1);
@@ -300,7 +303,7 @@ test("an expanded source windows its items to MAX_POPUP_ITEMS", () => {
   const section = root.children[0];
   section?.children[0]?.click(); // expand
   const list = section?.children[1];
-  assert.equal(list?.children.length, MAX_POPUP_ITEMS);
+  assert.equal(list?.children.length, MAX_POPUP_ITEMS + 1); // + the mark-all row (D.1)
   assert.equal(rowText(list?.children[0]), "Item 0");
 });
 
@@ -426,7 +429,7 @@ test("clicking a linkless item marks it read, removes the row, zeroes the pill",
   const list = section?.children[1];
   list?.children[0]?.children[0]?.click(); // the button
   assert.deepEqual(reads, ["g1"]);
-  assert.equal(list?.children.length, 0); // the row is gone, no grey-out
+  assert.equal(list?.children.length, 1); // the item row is gone (no grey-out); mark-all remains
   const pill = section?.children[0]?.children[1];
   assert.equal(pill?.textContent, "0");
   assert.equal(pill?.className, "count zero");
@@ -461,7 +464,104 @@ test("re-expanding after a read backfills the window from older unread items", (
   header?.click(); // collapse
   header?.click(); // re-expand
   const list = section?.children[1];
-  assert.equal(list?.children.length, MAX_POPUP_ITEMS); // Item 10 backfilled
+  assert.equal(list?.children.length, MAX_POPUP_ITEMS + 1); // Item 10 backfilled, + mark-all row
   assert.equal(rowText(list?.children[0]), "Item 1");
   assert.equal(rowText(list?.children[MAX_POPUP_ITEMS - 1]), `Item ${MAX_POPUP_ITEMS}`);
+});
+
+// ---- Iteration D.1: mark all read ----
+
+// The wholesale action lives under the expanded fold as the list's last row —
+// the header stays a pure toggle, and you see what you're dismissing first.
+test("an expanded source ends with a mark-all-read action row", () => {
+  const root = renderSrc([view({ unread: 2, items: [item({ guid: "a" }), item({ guid: "b" })] })]);
+  const section = root.children[0];
+  section?.children[0]?.click(); // expand
+  const rows = section?.children[1]?.children ?? [];
+  const last = rows[rows.length - 1];
+  assert.equal(last?.className, "mark-all-row");
+  assert.equal(last?.children[0]?.tag, "button");
+  assert.equal(last?.children[0]?.className, "mark-all");
+  assert.equal(last?.children[0]?.textContent, "Mark all read");
+  assert.equal(last?.children[0]?.href, ""); // an action, never a navigation
+});
+
+// A source with nothing unread has nothing to dismiss: the empty expansion
+// stays the boring line, no action row.
+test("the mark-all row does not render on an empty expansion", () => {
+  const root = renderSrc([view({ unread: 0, items: [] })]);
+  const section = root.children[0];
+  section?.children[0]?.click(); // expand
+  assert.equal(section?.children[1]?.tag, "p");
+});
+
+test("mark all read fires once with the source id, zeroes the pill, empties the body", () => {
+  const reads: string[] = [];
+  const root = renderSrc(
+    [
+      view({
+        id: "src1",
+        unread: 2,
+        items: [item({ guid: "a", link: "https://a.test/a" }), item({ guid: "b" })],
+      }),
+    ],
+    { onMarkAllRead: (id) => reads.push(id) },
+  );
+  const section = root.children[0];
+  section?.children[0]?.click(); // expand
+  const rows = section?.children[1]?.children ?? [];
+  rows[rows.length - 1]?.children[0]?.click(); // the mark-all button
+  assert.deepEqual(reads, ["src1"]);
+  const pill = section?.children[0]?.children[1];
+  assert.equal(pill?.textContent, "0");
+  assert.equal(pill?.className, "count zero");
+  // The open fold swaps to the empty line rather than collapsing under the click.
+  assert.equal(section?.children[1]?.tag, "p");
+  assert.equal(section?.children[1]?.textContent, "Nothing unread.");
+});
+
+// Marking all covers the ENTIRE backlog, not just the ten windowed rows: after
+// the action, collapse + re-expand must find nothing left to backfill.
+test("mark all read clears the whole backlog, beyond the visible window", () => {
+  const items = Array.from({ length: MAX_POPUP_ITEMS + 5 }, (_, i) =>
+    item({ guid: `g${i}`, title: `Item ${i}` }),
+  );
+  const root = renderSrc([view({ unread: items.length, items })]);
+  const section = root.children[0];
+  const header = section?.children[0];
+  header?.click(); // expand
+  const rows = section?.children[1]?.children ?? [];
+  rows[rows.length - 1]?.children[0]?.click(); // mark all
+  header?.click(); // collapse
+  header?.click(); // re-expand
+  assert.equal(section?.children[1]?.tag, "p");
+  assert.equal(section?.children[1]?.textContent, "Nothing unread.");
+});
+
+// A mixed session stays coherent: reading one item, then marking the rest,
+// double-fires nothing and the pill never goes negative.
+test("mark all after a per-item read fires each handler once and lands on zero", () => {
+  const itemReads: string[] = [];
+  const allReads: string[] = [];
+  const root = renderSrc(
+    [
+      view({
+        id: "s",
+        unread: 3,
+        items: [item({ guid: "a" }), item({ guid: "b" }), item({ guid: "c" })],
+      }),
+    ],
+    { onItemRead: (_id, guid) => itemReads.push(guid), onMarkAllRead: (id) => allReads.push(id) },
+  );
+  const section = root.children[0];
+  section?.children[0]?.click(); // expand
+  const list = section?.children[1];
+  list?.children[0]?.children[0]?.click(); // read "a" per-item
+  const rows = list?.children ?? [];
+  rows[rows.length - 1]?.children[0]?.click(); // then mark the rest
+  assert.deepEqual(itemReads, ["a"]);
+  assert.deepEqual(allReads, ["s"]);
+  const pill = section?.children[0]?.children[1];
+  assert.equal(pill?.textContent, "0");
+  assert.equal(pill?.className, "count zero");
 });
