@@ -2,20 +2,43 @@
 
 An RSS reader where the subscription list is a bookmarks folder.
 
-Make a folder called `Feedmark` in your bookmarks and put sites in it. (A feed
-URL works too, but the point is that you don't need one.) Every 15 minutes
-Feedmark polls each site, the toolbar badge totals what you haven't read, and
-the popup lists the newest titles per site. Clicking a site opens it and
-clears its count.
+Pick a folder to watch — the popup will ask on first run, or it's in the
+extension's options — and put sites in it. Plain bookmarks are enough: the
+site's homepage, not a feed URL. (A feed URL works too, but the point is that
+you don't need one.) Every 15 minutes Feedmark polls each site, and the
+toolbar badge counts what you haven't read.
+
+## Reading
+
+The popup shows one row per site with its unread count. Click the row and it
+folds open to the ten newest unread titles; click a title and the article
+opens in a new tab, marked read — it leaves the list, an older unread item
+takes its place, and the counts drop. At the end of the list there's a quiet
+"Mark all read" for when a site arrives with thirty unread posts you're never
+going to get to.
+
+Nothing greys out and there's no archive: read items just leave, and the
+badge is always exactly the number of titles still waiting. If the badge says
+zero, you're done.
+
+## Finding feeds
 
 Most blogs announce their feed in their HTML, and Feedmark picks that up on
 its own — but only when the feed lives on the same origin as the site. A feed
-advertised from some other domain is not trusted automatically; the popup
+advertised from some other domain is never trusted automatically; the popup
 shows a box to paste the address by hand instead. Same box for sites that
-don't announce a feed at all.
+don't announce a feed at all. Either way it's https or nothing — plain http
+is refused outright.
 
-Rename, move or delete a bookmark in the folder and the subscription follows.
-That's most of the manual.
+## Everything is a bookmark
+
+Rename, move or delete a bookmark in the folder and the subscription follows;
+there is no separate list to keep in sync. The watched folder itself is
+tracked by identity rather than name, so renaming it changes nothing. Even
+deleting it destroys nothing: Feedmark keeps what you've read on record and
+asks you to choose a folder again. That's most of the manual.
+
+## Privacy
 
 There's no account and no server. Feeds come straight from the sites you
 bookmarked, over https; everything Feedmark knows sits in your browser's
