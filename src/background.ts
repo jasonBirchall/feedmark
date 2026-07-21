@@ -7,7 +7,7 @@ import { feedsFromFolder, reconcile } from "./source.ts";
 import { pollAll } from "./poll.ts";
 import { resolveSubscription } from "./subscribe.ts";
 import { totalUnread, badgeText } from "./badge.ts";
-import { unreadCount } from "./readState.ts";
+import { unreadCount, unreadItems } from "./readState.ts";
 import type { FeedRecord } from "./storage.ts";
 import type { GetItemsResponse, SubscribeResponse } from "./messages.ts";
 
@@ -61,7 +61,7 @@ async function handleSubscribe(id: string, feedUrl: string): Promise<SubscribeRe
       url: r.url,
       title: r.title,
       unread: unreadCount(r),
-      items: r.items,
+      items: unreadItems(r),
       state: "feed",
     },
   };
@@ -88,8 +88,12 @@ browser.runtime.onMessage.addListener(
           id: f.id,
           url: f.url,
           title: f.title,
-          unread: unreadCount(f), // derived per iter B; FeedView's shape is unchanged
-          items: f.items,
+          // Pill and list both derive through readState's one shared predicate
+          // (iter C): items carries only the UNREAD items, so the popup renders
+          // what it gets and never re-filters — a duplicate-guid feed can't
+          // show rows the pill doesn't count. FeedView's shape is unchanged.
+          unread: unreadCount(f),
+          items: unreadItems(f),
           state: f.resolution,
         })),
       }));

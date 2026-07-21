@@ -3,7 +3,6 @@ import { renderSources } from "./render.ts";
 import type {
   GetItemsRequest,
   GetItemsResponse,
-  ClearUnreadRequest,
   SubscribeRequest,
   SubscribeResponse,
 } from "./messages.ts";
@@ -27,10 +26,9 @@ async function renderApp(root: HTMLElement): Promise<void> {
 
   root.appendChild(
     renderSources(sources, document, {
-      onOpen: (id) => {
-        const clear: ClearUnreadRequest = { type: "clearUnread", id };
-        void browser.runtime.sendMessage(clear);
-      },
+      // Toggling a source's fold is popup-local display — no message, no write.
+      // The only popup->background action left is subscribe; clearUnread's call
+      // site died with the header click-through (iter C) and D retires the rest.
       onSubscribe: async (id, feedUrl) => {
         const req: SubscribeRequest = { type: "subscribe", id, feedUrl };
         const res = (await browser.runtime.sendMessage(req)) as SubscribeResponse;

@@ -32,6 +32,12 @@ class FakeEl {
     this.children.push(child);
     return child;
   }
+  removeChild(child: FakeEl): FakeEl {
+    const at = this.children.indexOf(child);
+    if (at === -1) throw new Error("removeChild: not a child of this element");
+    this.children.splice(at, 1);
+    return child;
+  }
   addEventListener(type: string, handler: () => void): void {
     (this.#listeners[type] ??= []).push(handler);
   }
@@ -124,7 +130,6 @@ function view(over: Partial<FeedView> = {}): FeedView {
 
 function renderSrc(
   sources: FeedView[],
-  onOpen: (id: string) => void = () => {},
   onSubscribe: (id: string, feedUrl: string) => Promise<SubscribeResponse> = async () => ({
     ok: false,
     reason: "no-feed",
@@ -132,10 +137,54 @@ function renderSrc(
 ): FakeEl {
   const doc = new FakeDoc();
   return renderSources(sources, doc as unknown as Document, {
-    onOpen,
     onSubscribe,
   }) as unknown as FakeEl;
 }
+
+// C1: the fold. Opening the popup shows every source collapsed — header row
+// only (title + pill), no items, no paste field — regardless of source state.
+test("opening renders every source collapsed: header only", () => {
+  const root = renderSrc([
+    view({ title: "Alpha", unread: 2, items: [item({ guid: "a", title: "Story" })] }),
+    view({ id: "n", title: "NoFeed", state: "no-feed" }),
+  ]);
+  assert.equal(root.children.length, 2);
+  for (const section of root.children) {
+    assert.equal(section.children.length, 1); // the header row and nothing else
+  }
+});
+
+// C2: clicking a source header toggles its items open and closed. Toggling is
+// pure display — no handler fires, nothing is stored (there is no handler to
+// fire: the fold takes no callback at all).
+test("clicking a header toggles the source's items open and closed", () => {
+  const root = renderSrc([view({ unread: 1, items: [item({ guid: "a", title: "Story" })] })]);
+  const section = root.children[0];
+  const header = section?.children[0];
+
+  header?.click(); // open
+  assert.equal(section?.children.length, 2);
+  const list = section?.children[1];
+  assert.deepEqual(
+    list?.children.map((li) => li.textContent),
+    ["Story"],
+  );
+
+  header?.click(); // close
+  assert.equal(section?.children.length, 1);
+});
+
+// A source with nothing unread still expands — to a single muted line, so the
+// click never reads as broken ("keep it boring": customer decision, iter C).
+test("a source with zero unread expands to a 'Nothing unread.' line", () => {
+  const root = renderSrc([view({ unread: 0, items: [] })]);
+  const section = root.children[0];
+  section?.children[0]?.click(); // expand
+  const body = section?.children[1];
+  assert.equal(body?.tag, "p");
+  assert.equal(body?.className, "empty");
+  assert.equal(body?.textContent, "Nothing unread.");
+});
 
 test("renders one labelled section per source: title and count pill", () => {
   const root = renderSrc([view({ title: "Alpha", unread: 2 }), view({ title: "Beta", unread: 0 })]);
@@ -150,18 +199,6 @@ test("renders one labelled section per source: title and count pill", () => {
   );
 });
 
-test("a source's items render as text beneath its heading", () => {
-  const root = renderSrc([
-    view({ title: "Alpha", unread: 1, items: [item({ guid: "a", title: "Story" })] }),
-  ]);
-  const section = root.children[0];
-  const list = section?.children[1]; // [0] header row, [1] the item list
-  assert.deepEqual(
-    list?.children.map((li) => li.textContent),
-    ["Story"],
-  );
-});
-
 // The render-invariant gate extended to bookmark titles: a source's heading is
 // derived text like any item title, and must reach the DOM as inert text only.
 test("a <script> payload in a source title renders as inert text", () => {
@@ -171,12 +208,15 @@ test("a <script> payload in a source title renders as inert text", () => {
   assert.equal(heading?.textContent, payload);
 });
 
-test("a no-feed source renders a paste field instead of items", () => {
+// A no-feed source folds like the rest (customer decision, iter C): collapsed
+// row with no pill; expanding reveals the paste block instead of items.
+test("a no-feed source expands to a paste field instead of items", () => {
   const root = renderSrc([view({ title: "Simon Willison", state: "no-feed" })]);
   const section = root.children[0];
   const header = section?.children[0];
   assert.equal(header?.children[0]?.textContent, "Simon Willison");
   assert.equal(header?.children.length, 1); // no count pill on a no-feed source
+  header?.click(); // expand
   // The block after the header holds the paste UI: a label, an input, a button.
   const block = section?.children[1];
   const tags = block?.children.map((c) => c.tag);
@@ -201,6 +241,7 @@ test("render emits the class hooks popup.css styles", () => {
     view({ title: "A", unread: 1, items: [item({ guid: "g", title: "T" })] }),
     view({ id: "n", title: "B", state: "no-feed" }),
   ]);
+  for (const section of root.children) section.children[0]?.click(); // expand both
   const fed = root.children[0];
   assert.equal(fed?.className, "source");
   assert.equal(fed?.children[0]?.className, "source-header");
@@ -212,14 +253,11 @@ test("render emits the class hooks popup.css styles", () => {
 });
 
 test("subscribing with an http url shows the inline https error", async () => {
-  const root = renderSrc(
-    [view({ id: "x", state: "no-feed" })],
-    () => {},
-    async () => ({
-      ok: false,
-      reason: "not-https",
-    }),
-  );
+  const root = renderSrc([view({ id: "x", state: "no-feed" })], async () => ({
+    ok: false,
+    reason: "not-https",
+  }));
+  root.children[0]?.children[0]?.click(); // expand to reach the paste field
   const block = root.children[0]?.children[1];
   const input = block?.children.find((c) => c.tag === "input");
   const button = block?.children.find((c) => c.tag === "button");
@@ -231,15 +269,41 @@ test("subscribing with an http url shows the inline https error", async () => {
   assert.equal(button?.disabled, false); // re-enabled so the human can correct it
 });
 
-test("a source heading links to its site and signals a clear on click", () => {
-  const opened: string[] = [];
-  const root = renderSrc(
-    [view({ id: "moz", url: "https://blog.mozilla.org/", title: "Mozilla", unread: 3 })],
-    (id) => opened.push(id),
+// The render-invariant gate through the fold: a script payload in an item
+// title, parsed from a real feed body, stays inert text when revealed by
+// expanding its source — the new path from parse to row.
+test("a <script> payload in an item renders inert inside an expanded fold", () => {
+  const payload = `<script>alert(1)</script>`;
+  const root = renderSrc([view({ unread: 1, items: feedWithTitle(payload) })]);
+  const section = root.children[0];
+  section?.children[0]?.click(); // expand
+  assert.equal(section?.children[1]?.children[0]?.textContent, payload);
+});
+
+// C3's window bound through the fold: an expanded source shows at most
+// MAX_POPUP_ITEMS rows, in the order given (newest first as stored — customer
+// decision, iter C; older unread backfill from below as the window drains).
+test("an expanded source windows its items to MAX_POPUP_ITEMS", () => {
+  const items = Array.from({ length: MAX_POPUP_ITEMS + 2 }, (_, i) =>
+    item({ guid: `g${i}`, title: `Item ${i}` }),
   );
-  const link = root.children[0]?.children[0]?.children[0];
-  assert.equal(link?.href, "https://blog.mozilla.org/"); // opens the site
-  assert.equal(link?.textContent, "Mozilla");
-  link?.click();
-  assert.deepEqual(opened, ["moz"]); // clears the right source
+  const root = renderSrc([view({ unread: items.length, items })]);
+  const section = root.children[0];
+  section?.children[0]?.click(); // expand
+  const list = section?.children[1];
+  assert.equal(list?.children.length, MAX_POPUP_ITEMS);
+  assert.equal(list?.children[0]?.textContent, "Item 0");
+});
+
+// The old open-site + clear-count click-through is retired (customer decision,
+// iter C): the header is a toggle button, never a link. Nothing in the section
+// carries an href — the journey opens articles, not sites, and not until iter D.
+test("a source header is a toggle button, not a link", () => {
+  const root = renderSrc([
+    view({ id: "moz", url: "https://blog.mozilla.org/", title: "Mozilla", unread: 3 }),
+  ]);
+  const header = root.children[0]?.children[0];
+  assert.equal(header?.tag, "button");
+  assert.equal(header?.href, ""); // no site click-through anywhere in the row
+  assert.equal(header?.children[0]?.href, "");
 });

@@ -18,17 +18,19 @@ export function renderItems(items: ParsedItem[], doc: Document): HTMLElement {
   return list;
 }
 
-// One labelled section per source: a header row holding a clickable title (links
-// to the source's site) and, for a resolved feed, an unread-count pill — then that
-// source's items. Clicking the title opens the site (the href) and calls onOpen so
-// the caller can clear the count. The render invariant extends here — the bookmark
-// title reaches the DOM via textContent only, never innerHTML; the href is the
-// registration-validated https url. The count is extension-computed, never feed text.
+// One collapsed section per source (iter C): a header button holding the title
+// and, for a resolved feed, an unread-count pill. Clicking the header toggles
+// the source's body open and closed — pure display, no message, no storage
+// write. The fold state is the body's presence in the DOM (per-section, via
+// closure): ephemeral by construction, gone when the popup closes, everything
+// collapsed on open. The old open-site + clear-count click-through is retired —
+// the header is a button, never a link. The render invariant extends here: the
+// bookmark title reaches the DOM via textContent only, never innerHTML; the
+// count is extension-computed, never feed text.
 export function renderSources(
   sources: FeedView[],
   doc: Document,
   handlers: {
-    onOpen: (id: string) => void;
     onSubscribe: (id: string, feedUrl: string) => Promise<SubscribeResponse>;
   },
 ): HTMLElement {
@@ -37,13 +39,11 @@ export function renderSources(
     const section = doc.createElement("section");
     section.className = "source";
 
-    const header = doc.createElement("div");
+    const header = doc.createElement("button");
     header.className = "source-header";
-    const heading = doc.createElement("a");
+    const heading = doc.createElement("span");
     heading.className = "source-title";
-    heading.href = source.url; // the bookmark site — always the click-through
     heading.textContent = source.title;
-    heading.addEventListener("click", () => handlers.onOpen(source.id));
     header.appendChild(heading);
     if (source.state === "feed") {
       const count = doc.createElement("span");
@@ -53,14 +53,40 @@ export function renderSources(
     }
     section.appendChild(header);
 
-    if (source.state === "feed") {
-      section.appendChild(renderItems(source.items, doc));
-    } else {
-      section.appendChild(renderNoFeed(source, doc, handlers.onSubscribe));
-    }
+    let body: HTMLElement | null = null;
+    header.addEventListener("click", () => {
+      if (body) {
+        section.removeChild(body);
+        body = null;
+        return;
+      }
+      body = renderBody(source, doc, handlers.onSubscribe);
+      section.appendChild(body);
+    });
+
     root.appendChild(section);
   }
   return root;
+}
+
+// What an expanded source shows: its unread items (the background sends only
+// unread, via the shared readState predicate — the popup never re-filters), or
+// the paste field for a source with no feed.
+function renderBody(
+  source: FeedView,
+  doc: Document,
+  onSubscribe: (id: string, feedUrl: string) => Promise<SubscribeResponse>,
+): HTMLElement {
+  if (source.state !== "feed") return renderNoFeed(source, doc, onSubscribe);
+  if (source.items.length === 0) {
+    // Nothing unread: a single muted line, so expanding never reads as a broken
+    // click ("keep it boring" — customer decision, iter C).
+    const empty = doc.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "Nothing unread.";
+    return empty;
+  }
+  return renderItems(source.items, doc);
 }
 
 // The "no feed here" state: a clear label and a paste field. On Subscribe the button

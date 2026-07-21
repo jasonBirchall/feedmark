@@ -53,17 +53,32 @@ main > p {
   border-bottom: none;
 }
 
+/* The fold toggle (iter C): the header is a <button>, styled back down to the
+   quiet row it replaced — full-width click target, no chrome. */
 .source-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.source-title,
-.source-title:visited {
+.source-title {
   font-weight: 600;
   color: var(--heading);
-  text-decoration: none;
+}
+
+/* The expanded-but-nothing-unread line (iter C). */
+.empty {
+  margin: 4px 0 0;
+  padding-left: 8px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .count {
