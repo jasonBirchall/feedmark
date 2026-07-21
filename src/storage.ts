@@ -1,5 +1,5 @@
 import browser from "webextension-polyfill";
-import { markAllRead, normalizeRecord } from "./readState.ts";
+import { markItemRead as markRead, normalizeRecord } from "./readState.ts";
 import type { StoredFeedRecord } from "./readState.ts";
 import type { ParsedItem } from "./parseFeed.ts";
 
@@ -56,13 +56,13 @@ export async function saveFeeds(records: FeedRecord[]): Promise<void> {
   await browser.storage.local.set({ [KEY]: map });
 }
 
-// Zero one feed's unread count (the user opened it) by marking every stored
-// item read — the derived count then falls to zero. No-op if it's gone. The
-// background is the single writer, so this is only ever called there.
-export async function clearUnread(id: string): Promise<void> {
+// Mark one item read (the user clicked it, iter D) — the derived count drops by
+// one. No-op if the feed is gone. The background is the single writer, so this
+// is only ever called there.
+export async function markItemRead(id: string, guid: string): Promise<void> {
   const map = await readMap();
   const record = map[id];
   if (!record) return;
-  map[id] = markAllRead(record);
+  map[id] = markRead(record, guid);
   await browser.storage.local.set({ [KEY]: map });
 }

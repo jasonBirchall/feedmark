@@ -3,6 +3,7 @@ import { renderSources } from "./render.ts";
 import type {
   GetItemsRequest,
   GetItemsResponse,
+  MarkItemReadRequest,
   SubscribeRequest,
   SubscribeResponse,
 } from "./messages.ts";
@@ -27,13 +28,18 @@ async function renderApp(root: HTMLElement): Promise<void> {
   root.appendChild(
     renderSources(sources, document, {
       // Toggling a source's fold is popup-local display — no message, no write.
-      // The only popup->background action left is subscribe; clearUnread's call
-      // site died with the header click-through (iter C) and D retires the rest.
       onSubscribe: async (id, feedUrl) => {
         const req: SubscribeRequest = { type: "subscribe", id, feedUrl };
         const res = (await browser.runtime.sendMessage(req)) as SubscribeResponse;
         if (res.ok) await renderApp(root); // re-render so the source shows as a feed
         return res;
+      },
+      // Reading an item is fire-and-forget (messages.ts): the background
+      // persists and recomputes the badge; the popup's own display update is
+      // handled inside renderSources, no reply needed.
+      onItemRead: (id, guid) => {
+        const req: MarkItemReadRequest = { type: "markItemRead", id, guid };
+        void browser.runtime.sendMessage(req);
       },
     }),
   );

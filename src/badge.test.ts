@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { totalUnread, badgeText } from "./badge.ts";
-import { markAllRead } from "./readState.ts";
+import { markItemRead } from "./readState.ts";
 import type { FeedRecord } from "./storage.ts";
 import type { ParsedItem } from "./parseFeed.ts";
 
@@ -39,11 +39,14 @@ test("badge sums the derived unread across feeds", () => {
   assert.equal(totalUnread([]), 0);
 });
 
-test("clearing a source zeroes its contribution immediately", () => {
+test("reading a source's items zeroes its contribution immediately", () => {
+  // B5's clearing half, re-expressed per-item since iter D retired the
+  // wholesale clear: each read drops the sum by one, straight to zero.
   const a = rec("a", { items: items(["a1", "a2"]) });
   const b = rec("b", { items: items(["b1"]) });
   assert.equal(totalUnread([a, b]), 3);
-  assert.equal(totalUnread([markAllRead(a), b]), 1); // only b's item remains
+  assert.equal(totalUnread([markItemRead(a, "a1"), b]), 2);
+  assert.equal(totalUnread([["a1", "a2"].reduce(markItemRead, a), b]), 1); // only b's item remains
 });
 
 test("badge is blank at zero, numeric otherwise", () => {

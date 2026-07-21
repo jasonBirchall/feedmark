@@ -31,13 +31,15 @@ export function unreadCount(record: Pick<FeedRecord, "items" | "readGuids">): nu
   return unreadItems(record).length;
 }
 
-// "Clear" a source = mark every currently-stored item read. Current guids go
-// first so the cap can only ever evict guids of items already gone from
-// items[]; a guid past the cap whose item still rendered would flip the item
-// back to unread.
-export function markAllRead(record: FeedRecord): FeedRecord {
-  const merged = new Set([...record.items.map((item) => item.guid), ...record.readGuids]);
-  return { ...record, readGuids: [...merged].slice(0, MAX_READ_GUIDS) };
+// The human clicked one item (iter D). The guid is PREPENDED, never appended,
+// preserving the cap property from iter B's markAllRead (now retired with the
+// wholesale clear): what the cap evicts is always the oldest history — guids of
+// items long gone from items[] — so a still-stored item can never flip back to
+// unread. Idempotent: marking a read item read again changes nothing, so a
+// re-sent message or a double-click can't churn the history order.
+export function markItemRead(record: FeedRecord, guid: string): FeedRecord {
+  if (record.readGuids.includes(guid)) return record;
+  return { ...record, readGuids: [guid, ...record.readGuids].slice(0, MAX_READ_GUIDS) };
 }
 
 // What older installs may hold in storage.local: records written before

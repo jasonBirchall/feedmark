@@ -2,7 +2,7 @@
 // All poll state lives in storage.local; nothing is held in memory across wakes.
 import browser from "webextension-polyfill";
 import { ALARM_NAME, ALARM_PERIOD_MINUTES, SOURCE_FOLDER_TITLE } from "./config.ts";
-import { loadFeeds, saveFeed, saveFeeds, clearUnread } from "./storage.ts";
+import { loadFeeds, saveFeed, saveFeeds, markItemRead } from "./storage.ts";
 import { feedsFromFolder, reconcile } from "./source.ts";
 import { pollAll } from "./poll.ts";
 import { resolveSubscription } from "./subscribe.ts";
@@ -58,7 +58,6 @@ async function handleSubscribe(id: string, feedUrl: string): Promise<SubscribeRe
     ok: true,
     source: {
       id: r.id,
-      url: r.url,
       title: r.title,
       unread: unreadCount(r),
       items: unreadItems(r),
@@ -81,17 +80,16 @@ async function init(): Promise<void> {
 // network request. Returning a Promise replies with its resolved value.
 browser.runtime.onMessage.addListener(
   (message: unknown): Promise<GetItemsResponse | SubscribeResponse> | undefined => {
-    const msg = message as { type?: unknown; id?: unknown; feedUrl?: unknown };
+    const msg = message as { type?: unknown; id?: unknown; feedUrl?: unknown; guid?: unknown };
     if (msg?.type === "getItems") {
       return loadFeeds().then((feeds) => ({
         sources: feeds.map((f) => ({
           id: f.id,
-          url: f.url,
           title: f.title,
           // Pill and list both derive through readState's one shared predicate
           // (iter C): items carries only the UNREAD items, so the popup renders
           // what it gets and never re-filters — a duplicate-guid feed can't
-          // show rows the pill doesn't count. FeedView's shape is unchanged.
+          // show rows the pill doesn't count.
           unread: unreadCount(f),
           items: unreadItems(f),
           state: f.resolution,
@@ -106,9 +104,14 @@ browser.runtime.onMessage.addListener(
     ) {
       return handleSubscribe(msg.id, msg.feedUrl);
     }
-    // Opening a source clears its count; recompute the badge from the new state.
-    if (msg?.type === "clearUnread" && typeof msg.id === "string") {
-      void clearUnread(msg.id).then(refreshBadge);
+    // Reading an item (iter D): persist the read guid, recompute the badge from
+    // the new derived state. Fire-and-forget — no reply, see messages.ts.
+    if (
+      msg?.type === "markItemRead" &&
+      typeof msg.id === "string" &&
+      typeof msg.guid === "string"
+    ) {
+      void markItemRead(msg.id, msg.guid).then(refreshBadge);
     }
     return undefined; // not ours, or fire-and-forget with no reply
   },

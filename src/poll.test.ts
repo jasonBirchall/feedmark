@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { pollFeed, pollAll, type PollLogger } from "./poll.ts";
-import { unreadCount, markAllRead } from "./readState.ts";
+import { unreadCount, markItemRead } from "./readState.ts";
 import { MAX_ITEMS, MAX_SEEN_GUIDS } from "./config.ts";
 import type { FeedRecord } from "./storage.ts";
 import type { ParsedItem } from "./parseFeed.ts";
@@ -110,8 +110,8 @@ test("after a source is cleared, only a genuinely new item counts (not the backl
   });
   assert.ok(baselined);
   assert.equal(unreadCount(baselined), 3);
-  // ...the user opens the source, marking all current items read (clearUnread's internals).
-  const cleared = markAllRead(baselined);
+  // ...the user reads every current item, one click at a time (iter D's model).
+  const cleared = ["a", "b", "c"].reduce(markItemRead, baselined);
   assert.equal(unreadCount(cleared), 0);
   // A later poll with one genuinely new item derives 1 — a/b/c stay read even re-served.
   const out = await pollFeed(cleared, {

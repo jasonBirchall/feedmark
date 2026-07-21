@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   unreadItems,
   unreadCount,
-  markAllRead,
+  markItemRead,
   normalizeRecord,
   type StoredFeedRecord,
 } from "./readState.ts";
@@ -64,32 +64,55 @@ test("a read guid with no stored item contributes nothing (eviction semantics)",
   assert.equal(unreadCount(rec), 1);
 });
 
-test("markAllRead marks every current item read and keeps prior history", () => {
+// Iter D: the wholesale markAllRead died with the source-level clear (customer
+// decision); per-item read is the whole model, and it must uphold the same
+// invariants the clear did — idempotence, prior history kept, the cap shedding
+// only old history.
+
+test("markItemRead marks exactly one item read; the derived count drops by one", () => {
   const rec = record({
-    items: [item({ guid: "a" }), item({ guid: "b" })],
+    items: [item({ guid: "a" }), item({ guid: "b" }), item({ guid: "c" })],
     readGuids: ["older"],
   });
-  const out = markAllRead(rec);
-  assert.deepEqual(out.readGuids, ["a", "b", "older"]); // current first, history kept
-  assert.equal(unreadCount(out), 0); // B5's per-source half: cleared → zero, derived
-});
-
-test("markAllRead is idempotent (no duplicate guids)", () => {
-  const once = markAllRead(record({ items: [item({ guid: "a" })] }));
-  const twice = markAllRead(once);
-  assert.deepEqual(twice.readGuids, ["a"]);
-});
-
-test("readGuids is bounded, and the cap evicts old history, never current items", () => {
-  // Prior history already at the cap; marking two current items read must keep
-  // both current guids (they sort first) and shed the oldest history instead.
-  const history = Array.from({ length: MAX_READ_GUIDS }, (_, n) => `old${n}`);
-  const out = markAllRead(
-    record({ items: [item({ guid: "a" }), item({ guid: "b" })], readGuids: history }),
+  const out = markItemRead(rec, "b");
+  assert.deepEqual(out.readGuids, ["b", "older"]); // prepended, history kept
+  assert.deepEqual(
+    unreadItems(out).map((i) => i.guid),
+    ["a", "c"], // the read item is gone; its neighbours are untouched
   );
+});
+
+test("markItemRead is idempotent (D3): re-marking changes nothing", () => {
+  const once = markItemRead(record({ items: [item({ guid: "a" })], readGuids: ["older"] }), "a");
+  const twice = markItemRead(once, "a");
+  assert.deepEqual(twice.readGuids, ["a", "older"]); // no duplicate, no reorder
+  assert.equal(unreadCount(twice), 0);
+});
+
+test("readGuids stays bounded: the new guid is PREPENDED and the cap sheds oldest history", () => {
+  // History already at the cap; reading a stored item must keep its guid (it
+  // goes first) and evict the oldest history guid — never the other way, or a
+  // still-stored item could flip back to unread (the iter-B property iter D
+  // must preserve).
+  const history = Array.from({ length: MAX_READ_GUIDS }, (_, n) => `old${n}`);
+  const out = markItemRead(record({ items: [item({ guid: "a" })], readGuids: history }), "a");
   assert.equal(out.readGuids.length, MAX_READ_GUIDS);
-  assert.deepEqual(out.readGuids.slice(0, 2), ["a", "b"]);
-  assert.equal(unreadCount(out), 0); // every stored item still reads as read
+  assert.equal(out.readGuids[0], "a");
+  assert.equal(out.readGuids.includes(`old${MAX_READ_GUIDS - 1}`), false); // oldest shed
+  assert.equal(unreadCount(out), 0);
+});
+
+test("read state survives a re-poll that re-serves or reorders the item (D3 inherits B2)", () => {
+  const read = markItemRead(record({ items: [item({ guid: "a" }), item({ guid: "b" })] }), "a");
+  // A later poll re-serves the same items in a different order, plus a fresh one.
+  const repolled = {
+    ...read,
+    items: [item({ guid: "new" }), item({ guid: "b" }), item({ guid: "a" })],
+  };
+  assert.deepEqual(
+    unreadItems(repolled).map((i) => i.guid),
+    ["new", "b"], // "a" stays read; nothing re-counts
+  );
 });
 
 // B4: old-shape records load without error and behave sanely.
