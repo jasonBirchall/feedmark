@@ -17,4 +17,5 @@ const entry = (input, file) => ({
 export default [
   entry("src/background.ts", "dist/background.js"),
   entry("src/popup.ts", "dist/popup.js"),
+  entry("src/options.ts", "dist/options.js"),
 ];

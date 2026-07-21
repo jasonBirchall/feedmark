@@ -37,6 +37,8 @@ build: clean ## Bundle the extension into dist/
 	cp manifest.json dist/
 	cp src/popup.html dist/
 	cp src/popup.css dist/
+	cp src/options.html dist/
+	cp src/options.css dist/
 	mkdir -p dist/icons
 	cp icons/*.png dist/icons/  # PNGs only: the source SVG isn't referenced by the manifest and shouldn't ship
 

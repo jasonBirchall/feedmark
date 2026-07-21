@@ -2,33 +2,106 @@
 // All poll state lives in storage.local; nothing is held in memory across wakes.
 import browser from "webextension-polyfill";
 import { ALARM_NAME, ALARM_PERIOD_MINUTES, SOURCE_FOLDER_TITLE } from "./config.ts";
-import { loadFeeds, saveFeed, saveFeeds, markItemRead, markSourceRead } from "./storage.ts";
-import { feedsFromFolder, reconcile } from "./source.ts";
+import {
+  loadFeeds,
+  saveFeed,
+  saveFeeds,
+  markItemRead,
+  markSourceRead,
+  loadSettings,
+  saveSettings,
+} from "./storage.ts";
+import { feedsFromFolder, nextRegistry } from "./source.ts";
+import { listFolders } from "./folders.ts";
 import { pollAll } from "./poll.ts";
 import { resolveSubscription } from "./subscribe.ts";
 import { totalUnread, badgeText } from "./badge.ts";
 import { unreadCount, unreadItems } from "./readState.ts";
-import type { FeedRecord } from "./storage.ts";
-import type { GetItemsResponse, SubscribeResponse } from "./messages.ts";
+import type { FolderScan } from "./source.ts";
+import type {
+  FolderStatus,
+  GetFoldersResponse,
+  GetItemsResponse,
+  SetFolderResponse,
+  SubscribeResponse,
+} from "./messages.ts";
 
-// Scan the folder titled SOURCE_FOLDER_TITLE into fresh feed records — empty if
-// there's no such folder yet (popup then shows "No items yet.").
-async function scanFolder(): Promise<FeedRecord[]> {
+// The watched folder's id (iter E). With no settings stored at all, the
+// one-time migration adopts the folder titled SOURCE_FOLDER_TITLE and
+// persists its id — an existing install keeps working untouched; a fresh
+// install with no such folder persists null and the popup prompts for the
+// options page. After that the title never matters again: the folder is
+// tracked by identity, so renames change nothing and a same-named second
+// folder is never picked up.
+async function resolveFolderId(): Promise<string | null> {
+  const settings = await loadSettings();
+  if (settings) return settings.folderId;
   const matches = await browser.bookmarks.search({ title: SOURCE_FOLDER_TITLE });
-  const folder = matches.find((node) => !node.url); // a folder has no url
-  if (!folder) return [];
-  const [tree] = await browser.bookmarks.getSubTree(folder.id);
-  return tree ? feedsFromFolder(tree) : [];
+  const folderId = matches.find((node) => !node.url)?.id ?? null; // a folder has no url
+  await saveSettings({ folderId });
+  return folderId;
 }
 
-// Bring the registry in line with the folder, then poll. Runs at init and on every
-// bookmark event, so add/rename/move/remove reflect without a reload. reconcile
-// preserves accumulated state and drops vanished feeds; the background stays the
-// single writer.
+// Scan the chosen folder into fresh feed records. getSubTree REJECTS on an
+// unknown id — which is what tells a deleted folder ("missing": registry kept,
+// fail safe) apart from an empty one ("ok" with no feeds: records drop).
+async function scanFolder(): Promise<FolderScan> {
+  const folderId = await resolveFolderId();
+  if (folderId === null) return { status: "none" };
+  try {
+    const [tree] = await browser.bookmarks.getSubTree(folderId);
+    return { status: "ok", feeds: tree ? feedsFromFolder(tree) : [] };
+  } catch {
+    return { status: "missing" };
+  }
+}
+
+// Bring the registry in line with the folder. nextRegistry applies the iter-E
+// fail-safe: only an OK scan may change the registry — a missing or unchosen
+// folder destroys nothing.
+async function syncFolder(): Promise<void> {
+  const scan = await scanFolder();
+  await saveFeeds(nextRegistry(await loadFeeds(), scan));
+}
+
+// Sync then poll. Runs at init and on every bookmark event, so
+// add/rename/move/remove reflect without a reload. reconcile preserves
+// accumulated state and drops vanished feeds; the background stays the single
+// writer.
 async function resyncFolder(): Promise<void> {
-  const current = await loadFeeds();
-  await saveFeeds(reconcile(current, await scanFolder()));
+  await syncFolder();
   await pollCycle();
+}
+
+// What the popup's empty state needs to know (iter E). A local bookmarks
+// lookup only — opening the popup still makes no network request.
+async function folderStatus(): Promise<FolderStatus> {
+  const folderId = await resolveFolderId();
+  if (folderId === null) return "none";
+  try {
+    await browser.bookmarks.get(folderId);
+    return "ok";
+  } catch {
+    return "missing";
+  }
+}
+
+// Choose the watched folder (iter E): validate the id still resolves, persist
+// the setting, sync the registry, and only then reply — so the options page's
+// "Saved." means the choice took. The poll runs on asynchronously and the
+// badge follows (customer decision: reply after persist + scan, not the full
+// poll). Validation first: persisting a dead id would wrongly flip the popup
+// into the folder-gone state.
+async function handleSetFolder(id: string): Promise<SetFolderResponse> {
+  try {
+    await browser.bookmarks.getSubTree(id);
+  } catch {
+    return { ok: false }; // deleted since it was listed; nothing changed
+  }
+  await saveSettings({ folderId: id });
+  await syncFolder();
+  void pollCycle();
+  return { ok: true };
 }
 
 async function refreshBadge(): Promise<void> {
@@ -79,10 +152,17 @@ async function init(): Promise<void> {
 // already stored, and never triggers a fetch — so opening the popup makes no
 // network request. Returning a Promise replies with its resolved value.
 browser.runtime.onMessage.addListener(
-  (message: unknown): Promise<GetItemsResponse | SubscribeResponse> | undefined => {
+  (
+    message: unknown,
+  ):
+    | Promise<GetItemsResponse | GetFoldersResponse | SetFolderResponse | SubscribeResponse>
+    | undefined => {
     const msg = message as { type?: unknown; id?: unknown; feedUrl?: unknown; guid?: unknown };
     if (msg?.type === "getItems") {
-      return loadFeeds().then((feeds) => ({
+      return Promise.all([folderStatus(), loadFeeds()]).then(([folder, feeds]) => ({
+        // The folder state rides along (iter E) so the popup can tell "no
+        // folder chosen" and "folder deleted" apart from "folder empty".
+        folder,
         sources: feeds.map((f) => ({
           id: f.id,
           title: f.title,
@@ -95,6 +175,18 @@ browser.runtime.onMessage.addListener(
           state: f.resolution,
         })),
       }));
+    }
+    // The options page's picker data (iter E): the full folder list plus the
+    // current choice. Read-only, like getItems.
+    if (msg?.type === "getFolders") {
+      return Promise.all([browser.bookmarks.getTree(), resolveFolderId()]).then(
+        ([roots, currentId]) => ({ folders: listFolders(roots), currentId }),
+      );
+    }
+    // Choose the watched folder (iter E): request/response, replied after
+    // persist + sync; the poll continues asynchronously.
+    if (msg?.type === "setFolder" && typeof msg.id === "string") {
+      return handleSetFolder(msg.id);
     }
     // Subscribe a no-feed source to a pasted feed URL; reply with the resolved source.
     if (

@@ -1,6 +1,7 @@
 import type { ParsedItem } from "./parseFeed.ts";
 import type { SubscribeReason } from "./subscribe.ts";
 import type { FeedResolution } from "./storage.ts";
+import type { FolderChoice } from "./folders.ts";
 
 // The popup <-> background message protocol. Typed in one place so both ends
 // stay in sync. The popup only ever READS state (it messages the background,
@@ -21,7 +22,29 @@ export type FeedView = {
   state: FeedResolution; // "feed" → show items; otherwise → show the paste field
 };
 
-export type GetItemsResponse = { sources: FeedView[] };
+// How the popup tells its empty states apart (iter E): "none" = no folder
+// chosen yet (fresh install) and "missing" = the chosen folder was deleted —
+// both prompt for the options page, the latter with stored records preserved
+// (fail safe); "ok" = the folder resolves, so an empty source list just means
+// an empty folder.
+export type FolderStatus = "ok" | "none" | "missing";
+
+export type GetItemsResponse = { folder: FolderStatus; sources: FeedView[] };
+
+// The options page's read (iter E): every bookmark folder, flat and
+// path-labelled, plus the current choice. Request/response like getItems.
+export type GetFoldersRequest = { type: "getFolders" };
+
+export type GetFoldersResponse = { folders: FolderChoice[]; currentId: string | null };
+
+// Choose the watched folder (iter E). Request/response: the background — the
+// single writer, for settings as for feeds — persists the id, rescans and
+// reconciles, then replies; polling continues asynchronously and the badge
+// follows (customer decision: reply after persist + scan, not the full poll).
+// ok: false = the folder vanished since it was listed; nothing changed.
+export type SetFolderRequest = { type: "setFolder"; id: string };
+
+export type SetFolderResponse = { ok: boolean };
 
 // Fire-and-forget: the human clicked one item (iter D). No reply — for a linked
 // item the new tab steals focus and closes the popup anyway; on reopen the

@@ -26,6 +26,32 @@ export type FeedRecord = {
 };
 
 const KEY = "feeds";
+const SETTINGS_KEY = "settings";
+
+// The watched-folder setting (iter E): the folder is tracked by IDENTITY, so
+// renames change nothing and a same-named second folder is never picked up.
+// folderId: null means the one-time adoption ran and found nothing — the
+// popup prompts for the options page.
+export type Settings = {
+  folderId: string | null;
+};
+
+// null (no settings stored at all) is distinct from { folderId: null }: it
+// tells the background the one-time title-adoption migration hasn't run yet
+// (background.ts resolveFolderId). Same read-boundary defaulting pattern as
+// normalizeRecord: a partial stored shape normalises on the way out. Written
+// only by the background — the options page asks via setFolder; the single
+// writer holds for settings exactly as it does for feeds.
+export async function loadSettings(): Promise<Settings | null> {
+  const stored = await browser.storage.local.get(SETTINGS_KEY);
+  const settings = stored[SETTINGS_KEY] as Partial<Settings> | undefined;
+  if (!settings) return null;
+  return { folderId: settings.folderId ?? null };
+}
+
+export async function saveSettings(settings: Settings): Promise<void> {
+  await browser.storage.local.set({ [SETTINGS_KEY]: settings });
+}
 
 // Every read passes through normalizeRecord, so pre-B/pre-A records (stored
 // unread counter, no readGuids, linkless items) upgrade in place on first

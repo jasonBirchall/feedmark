@@ -9,6 +9,7 @@ export type BookmarkNode = {
   id: string;
   title: string;
   url?: string;
+  type?: string; // Firefox only ("bookmark" | "folder" | "separator"); absent on Chrome
   children?: BookmarkNode[];
 };
 
@@ -61,6 +62,26 @@ export function fetchTarget(record: FeedRecord): FetchInput {
     etag: record.etag,
     lastModified: record.lastModified,
   };
+}
+
+// One scan of the watched folder (iter E). "ok" carries the records mirrored
+// from the folder — possibly none, when the folder is genuinely empty. "none"
+// means no folder is chosen yet; "missing" means the chosen id no longer
+// resolves (the folder was deleted).
+export type FolderScan =
+  | { status: "ok"; feeds: FeedRecord[] }
+  | { status: "missing" }
+  | { status: "none" };
+
+// What a scan does to the registry (iter E): only an OK scan may change it. A
+// missing or unchosen folder keeps the stored records — read state included —
+// untouched: fail safe, because deletion may be transient and reconciling
+// against nothing would erase everything (customer decision, iter E). An OK
+// scan of an EMPTY folder does drop every record: that is what emptying the
+// folder means. Switching folders rides the same line — the new folder's scan
+// drops the old folder's records, and switching back re-baselines as unread.
+export function nextRegistry(current: FeedRecord[], scan: FolderScan): FeedRecord[] {
+  return scan.status === "ok" ? reconcile(current, scan.feeds) : current;
 }
 
 // Reconcile the stored registry against a fresh folder scan, returning the next

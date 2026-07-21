@@ -13,8 +13,10 @@ export const MAX_SEEN_GUIDS = 200; // bounded seen-GUID history per feed
 export const MAX_READ_GUIDS = 200; // bounded read-GUID history per feed (iter B; mirrors MAX_SEEN_GUIDS)
 export const MAX_CONCURRENCY = 3; // concurrent feed fetches
 
-// The watched folder (iter 5): the extension mirrors the bookmarks folder titled
-// this — each child bookmark becomes a feed source.
+// Migration-only (iter E): the watched folder is now an explicit user choice
+// stored by ID (storage.ts Settings, chosen on the options page). This title
+// survives solely for the one-time adoption of a pre-E install's "Feedmark"
+// folder (background.ts resolveFolderId); nothing else may consult it.
 export const SOURCE_FOLDER_TITLE = "Feedmark";
 
 // Popup display bound (iter 8.75): item titles shown per source. Display-only —

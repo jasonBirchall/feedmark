@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { feedFromBookmark, feedsFromFolder, reconcile, fetchTarget } from "./source.ts";
+import {
+  feedFromBookmark,
+  feedsFromFolder,
+  nextRegistry,
+  reconcile,
+  fetchTarget,
+} from "./source.ts";
 import type { FeedRecord } from "./storage.ts";
 
 function feed(over: Partial<FeedRecord> = {}): FeedRecord {
@@ -148,6 +154,40 @@ test("fetchTarget fetches the pasted feed url when present", () => {
   const t = fetchTarget(feed({ url: "https://a.test/", feedUrl: "https://a.test/atom.xml" }));
   assert.equal(t.url, "https://a.test/atom.xml");
   assert.equal(t.origin, "https://a.test"); // the record's pinned origin
+});
+
+// The fail-safe decision (iter E, E5): a MISSING folder — deleted, maybe
+// transiently — changes nothing. Read state survives; the popup prompts to
+// re-choose instead of the registry being reconciled against nothing.
+test("a missing folder keeps the registry — and its read state — untouched", () => {
+  const current = [feed({ id: "a", readGuids: ["r"], resolution: "feed" })];
+  assert.deepEqual(nextRegistry(current, { status: "missing" }), current);
+});
+
+test("no chosen folder keeps the registry untouched", () => {
+  const current = [feed({ id: "a" })];
+  assert.deepEqual(nextRegistry(current, { status: "none" }), current);
+});
+
+// ...but a folder that EXISTS and is empty means the user emptied it: the
+// records go. Missing and empty are distinct on purpose (iter E).
+test("an ok scan of an empty folder drops every record", () => {
+  const current = [feed({ id: "a" }), feed({ id: "b" })];
+  assert.deepEqual(nextRegistry(current, { status: "ok", feeds: [] }), []);
+});
+
+// The switching cost, accepted honestly (customer decision, iter E): choosing
+// a different folder drops the old folder's records, read state included —
+// switching back later re-baselines those sources as unread.
+test("switching folders drops the old folder's records and their read state", () => {
+  const current = [feed({ id: "old", readGuids: ["r"], resolution: "feed" })];
+  const scanned = [feed({ id: "new", url: "https://new.test/feed" })];
+  const next = nextRegistry(current, { status: "ok", feeds: scanned });
+  assert.deepEqual(
+    next.map((f) => f.id),
+    ["new"],
+  );
+  assert.equal(next[0]?.resolution, "pending"); // fresh — baselines on first poll
 });
 
 test("reconcile re-baselines a bookmark whose url changed", () => {

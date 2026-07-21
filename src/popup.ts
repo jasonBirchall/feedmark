@@ -18,13 +18,33 @@ async function renderApp(root: HTMLElement): Promise<void> {
   const request: GetItemsRequest = { type: "getItems" };
   const response = (await browser.runtime.sendMessage(request)) as GetItemsResponse | undefined;
   const sources = response?.sources ?? [];
+  const folder = response?.folder ?? "ok";
 
-  if (sources.length === 0) {
+  // The folder states (iter E). "none" and "missing" both prompt for the
+  // options page — "missing" keeps rendering the preserved sources below the
+  // prompt (fail safe: deletion destroyed nothing, and hiding live counts
+  // would read as data loss). Only a folder that EXISTS and yields no sources
+  // is "No items yet.". All copy is extension-authored, never feed text.
+  if (folder !== "ok") {
+    const prompt = document.createElement("div");
+    prompt.className = "folder-prompt";
+    const message = document.createElement("p");
+    message.textContent =
+      folder === "none"
+        ? "Choose a bookmarks folder to watch."
+        : "The watched folder is gone. Your sources are kept until you choose again.";
+    prompt.appendChild(message);
+    const button = document.createElement("button");
+    button.textContent = "Choose folder…";
+    button.addEventListener("click", () => void browser.runtime.openOptionsPage());
+    prompt.appendChild(button);
+    root.appendChild(prompt);
+  } else if (sources.length === 0) {
     const empty = document.createElement("p");
     empty.textContent = "No items yet.";
     root.appendChild(empty);
-    return;
   }
+  if (sources.length === 0) return;
 
   root.appendChild(
     renderSources(sources, document, {
