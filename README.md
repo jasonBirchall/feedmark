@@ -54,6 +54,23 @@ reading pane, no sync — some of that may come later, none of it is promised.
 from-source build — it reproduces the shipped artifact byte-for-byte, which is
 what a store reviewer needs and also how `make verify-build` keeps us honest.
 
+## Releasing
+
+A release is a signed tag; pushing it is the deploy.
+
+```
+git commit -m "Bump to version 0.2.0"   # manifest.json is the single source of truth
+git push origin main                    # CI runs the same gates as the local make loop
+git tag -s v0.2.0 -m "Feedmark 0.2.0"
+git tag -v v0.2.0                       # verify the signature before it leaves the laptop
+git push origin v0.2.0                  # triggers the AMO publish
+```
+
+The tag must match the manifest version exactly — the release job refuses
+anything else — and the job re-proves the reproducible build before uploading
+to AMO with the source package attached. The Chrome Web Store is manual for
+now: `make build`, zip `dist/`, upload through the developer dashboard.
+
 ## License
 
 [Apache-2.0](LICENSE).
